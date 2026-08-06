@@ -177,6 +177,7 @@ window.Shell = (() => {
     localStorage.setItem(BALANCE_KEY, String(n));
     if (getActiveCurrency() === "cash") document.dispatchEvent(new CustomEvent("nj:balance", { detail: n }));
     bumpSyncFloor(); // every real balance change pushes this account's sync "floor" forward — see SYNC_FLOOR_KEY below
+    pushLiveAccountState();
     return n;
   }
   function addCashBalance(delta) {
@@ -200,6 +201,7 @@ window.Shell = (() => {
     localStorage.setItem(REWARD_BALANCE_KEY, String(n));
     if (getActiveCurrency() === "reward") document.dispatchEvent(new CustomEvent("nj:balance", { detail: n }));
     document.dispatchEvent(new CustomEvent("nj:reward", { detail: n }));
+    pushLiveAccountState();
     return n;
   }
   function addRewardBalance(delta) {
@@ -367,6 +369,7 @@ window.Shell = (() => {
     const n = Math.max(0, Math.round(value * 100) / 100);
     localStorage.setItem(VAULT_KEY, String(n));
     document.dispatchEvent(new CustomEvent("nj:vault", { detail: n }));
+    pushLiveAccountState();
     return n;
   }
   window.addEventListener("storage", (e) => {
@@ -1158,6 +1161,7 @@ window.Shell = (() => {
     // live-update the sidebar case badge in THIS tab immediately (storage events only fire
     // in other tabs), same pattern as nj:balance/nj:vault/nj:betlog below.
     document.dispatchEvent(new CustomEvent("nj:cases", { detail: raffleSpinsAvailable() }));
+    pushLiveAccountState();
   }
   function raffleSpinsAvailable() {
     const wagered = getLifetimeWagered();
@@ -1440,6 +1444,7 @@ window.Shell = (() => {
       if (wins.length > 200) wins.shift();
       setRecentWins(wins);
     }
+    pushLiveAccountState();
     return list;
   }
   // Resets only the live-stats graph / bet history — must NOT touch rank progress, wheel spins,
@@ -1679,6 +1684,7 @@ window.Shell = (() => {
   function setEarnState(s) {
     localStorage.setItem(EARN_KEY, JSON.stringify(s));
     document.dispatchEvent(new CustomEvent("nj:earn", { detail: s }));
+    pushLiveAccountState();
     return s;
   }
   // Returns null once an upgrade is at its level cap — callers must treat null as "can't buy".
