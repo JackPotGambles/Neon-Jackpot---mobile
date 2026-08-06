@@ -589,6 +589,7 @@ a { text-decoration: none; color: inherit; }
   #page-content { grid-row: 2; grid-column: 1; }
   .search-results-grid { grid-template-columns: 1fr; }
   .shell-dropdown { width: calc(100vw - 32px); right: -12px; }
+  .top-center-fixed { height: 69px; }
 }
 
 /* ---------- global "Disable Animations" override ---------- */
