@@ -588,7 +588,6 @@ window.Shell = (() => {
     setAccounts(accts);
     cloudSaveAccount(username, accts[username]);
   }
-
   // ---------- live full-account sync ----------
   // Instead of syncing individual numbers (balance, vault, cases, passive income...) one at a
   // time, this pushes the ENTIRE local save snapshot to Firebase every time anything changes,
@@ -3629,7 +3628,7 @@ window.Shell = (() => {
   function setupAccountAutosave() {
     if (__njAutosaveSetup) return;
     __njAutosaveSetup = true;
-    setInterval(() => { if (!isLoggedOut()) { persistActiveAccount(); pushLiveAccountState(); } }, 3000);
+    setInterval(() => { if (!isLoggedOut()) { persistActiveAccount(); pushLiveAccountState(); } }, 5000);
     window.addEventListener("beforeunload", () => { if (!isLoggedOut()) { persistActiveAccount(); pushLiveAccountState(); } });
   }
 
