@@ -641,7 +641,8 @@ window.Chat = (() => {
     if (!document.querySelector("[data-chat-panel]")) {
       document.body.insertAdjacentHTML("beforeend", panelHTML());
     }
-    if (!panelBound) { bindPanel(); panelBound = true; }
+    bindPanel();
+    panelBound = true;
     bindProfileClicks();
 
     renderMessages();
