@@ -3568,6 +3568,7 @@ window.Shell = (() => {
         if (topEl) topEl.innerHTML = topbarHTML();
         if (sideEl) sideEl.innerHTML = sidebarHTML(activeTab);
         bindChrome();
+        if (window.Chat && typeof window.Chat.mount === "function") window.Chat.mount();
       });
     }
     setupAccountAutosave();
