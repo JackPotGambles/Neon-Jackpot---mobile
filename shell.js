@@ -600,13 +600,17 @@ window.Shell = (() => {
   let liveAccountUnsub = null;
   let liveAccountRetryTimer = null;
   let applyingRemoteAccountUpdate = false; // guards against re-pushing what we just received
+  let pushLiveAccountTimer = null;
   function pushLiveAccountState() {
     if (applyingRemoteAccountUpdate) return;
-    const username = getActiveAccountUsername();
-    const db = getCloudDb();
-    if (!username || !db) return;
-    const snapshot = snapshotCurrentState();
-    db.ref("liveAccounts/" + username).set({ snapshot, savedAt: Date.now() }).catch(() => {});
+    clearTimeout(pushLiveAccountTimer);
+    pushLiveAccountTimer = setTimeout(() => {
+      const username = getActiveAccountUsername();
+      const db = getCloudDb();
+      if (!username || !db) return;
+      const snapshot = snapshotCurrentState();
+      db.ref("liveAccounts/" + username).set({ snapshot, savedAt: Date.now() }).catch(() => {});
+    }, 120);
   }
   function startLiveAccountSync() {
     if (liveAccountUnsub) return;
