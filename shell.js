@@ -172,51 +172,12 @@ window.Shell = (() => {
     const n = raw === null ? DEFAULT_BALANCE : parseFloat(raw);
     return isNaN(n) ? DEFAULT_BALANCE : n;
   }
-  function setCashBalance(value, skipCloudPush) {
+  function setCashBalance(value) {
     const n = Math.max(0, Math.round(value * 100) / 100);
     localStorage.setItem(BALANCE_KEY, String(n));
     if (getActiveCurrency() === "cash") document.dispatchEvent(new CustomEvent("nj:balance", { detail: n }));
     bumpSyncFloor(); // every real balance change pushes this account's sync "floor" forward — see SYNC_FLOOR_KEY below
-    if (!skipCloudPush) pushLiveBalance(n);
     return n;
-  }
-
-  // ---------- live cross-device balance sync ----------
-  // Pushes the current cash balance to Firebase the instant it changes, and every open tab on
-  // the same account listens for changes made by OTHER devices, applying them here in near
-  // real time (no manual refresh needed). skipCloudPush stops an infinite loop: when we receive
-  // a live update FROM Firebase, we must not immediately push it right back up.
-  let liveBalanceUnsub = null;
-  let liveBalanceRetryTimer = null;
-  function pushLiveBalance(amount) {
-    const db = getCloudDb();
-    const id = getPlayerProfile().id;
-    if (!db || !id) return;
-    db.ref("balances/" + id).set(amount).catch(() => {});
-  }
-  function startLiveBalanceSync() {
-    if (liveBalanceUnsub) return; // already listening
-    const db = getCloudDb();
-    const id = getPlayerProfile().id;
-    if (!db || !id) {
-      // Firebase SDK may not have finished loading/initializing yet when mount() first runs —
-      // keep retrying every second until it's ready, instead of silently giving up forever.
-      clearTimeout(liveBalanceRetryTimer);
-      liveBalanceRetryTimer = setTimeout(startLiveBalanceSync, 1000);
-      return;
-    }
-    const ref = db.ref("balances/" + id);
-    const handler = (snap) => {
-      const val = snap.val();
-      if (typeof val !== "number") return;
-      if (Math.round(val * 100) === Math.round(getCashBalance() * 100)) return; // already matches, ignore
-      setCashBalance(val, true); // true = don't push this straight back up to Firebase
-    };
-    ref.on("value", handler);
-    liveBalanceUnsub = () => ref.off("value", handler);
-    // Push our current value once at startup too, so a brand-new account (nothing in
-    // balances/{id} yet) seeds Firebase instead of waiting for the next balance change.
-    pushLiveBalance(getCashBalance());
   }
   function addCashBalance(delta) {
     return setCashBalance(getCashBalance() + delta);
@@ -623,9 +584,57 @@ window.Shell = (() => {
     const accts = getAccounts();
     if (!accts[username]) return;
     accts[username].snapshot = snapshotCurrentState();
-    accts[username].savedAt = Date.now(); // NEW — lets other devices know how fresh this copy is
+    accts[username].savedAt = Date.now();
     setAccounts(accts);
     cloudSaveAccount(username, accts[username]);
+  }
+
+  // ---------- live full-account sync ----------
+  // Instead of syncing individual numbers (balance, vault, cases, passive income...) one at a
+  // time, this pushes the ENTIRE local save snapshot to Firebase every time anything changes,
+  // and every open device listens for changes and pulls the whole thing down live. This is what
+  // stops two devices both acting on the same stale copy (e.g. both claiming the same passive
+  // income, or one device's vault withdrawal getting silently reverted by the other).
+  let liveAccountUnsub = null;
+  let liveAccountRetryTimer = null;
+  let applyingRemoteAccountUpdate = false; // guards against re-pushing what we just received
+  function pushLiveAccountState() {
+    if (applyingRemoteAccountUpdate) return;
+    const username = getActiveAccountUsername();
+    const db = getCloudDb();
+    if (!username || !db) return;
+    const snapshot = snapshotCurrentState();
+    db.ref("liveAccounts/" + username).set({ snapshot, savedAt: Date.now() }).catch(() => {});
+  }
+  function startLiveAccountSync() {
+    if (liveAccountUnsub) return;
+    const username = getActiveAccountUsername();
+    const db = getCloudDb();
+    if (!username || !db) {
+      clearTimeout(liveAccountRetryTimer);
+      liveAccountRetryTimer = setTimeout(startLiveAccountSync, 1000);
+      return;
+    }
+    const ref = db.ref("liveAccounts/" + username);
+    let lastAppliedSavedAt = 0;
+    const handler = (snap) => {
+      const val = snap.val();
+      if (!val || !val.snapshot) return;
+      if ((val.savedAt || 0) <= lastAppliedSavedAt) return; // already have this or newer
+      lastAppliedSavedAt = val.savedAt || 0;
+      applyingRemoteAccountUpdate = true;
+      loadSnapshotIntoLive(val.snapshot);
+      applyingRemoteAccountUpdate = false;
+      document.dispatchEvent(new CustomEvent("nj:balance", { detail: getBalance() }));
+      document.dispatchEvent(new CustomEvent("nj:vault", { detail: getVaultBalance() }));
+      document.dispatchEvent(new CustomEvent("nj:betlog", { detail: getBetLog() }));
+      document.dispatchEvent(new CustomEvent("nj:cases", { detail: raffleSpinsAvailable() }));
+      document.dispatchEvent(new CustomEvent("nj:reward", { detail: getRewardBalance() }));
+      document.dispatchEvent(new CustomEvent("nj:earn", { detail: getEarnState() }));
+    };
+    ref.on("value", handler);
+    liveAccountUnsub = () => ref.off("value", handler);
+    pushLiveAccountState(); // seed it on first connect
   }
 
   // ---------- register a brand-new account (used by the post-logout Register screen) ----------
@@ -3610,7 +3619,7 @@ window.Shell = (() => {
       });
     }
     setupAccountAutosave();
-    startLiveBalanceSync();
+    startLiveAccountSync();
   }
 
   // Periodically snapshots the active account's live state back into the account registry, plus
@@ -3620,8 +3629,8 @@ window.Shell = (() => {
   function setupAccountAutosave() {
     if (__njAutosaveSetup) return;
     __njAutosaveSetup = true;
-    setInterval(() => { if (!isLoggedOut()) persistActiveAccount(); }, 10000);
-    window.addEventListener("beforeunload", () => { if (!isLoggedOut()) persistActiveAccount(); });
+    setInterval(() => { if (!isLoggedOut()) { persistActiveAccount(); pushLiveAccountState(); } }, 3000);
+    window.addEventListener("beforeunload", () => { if (!isLoggedOut()) { persistActiveAccount(); pushLiveAccountState(); } });
   }
 
   // ===================== LOGOUT / LOGIN GATE =====================
