@@ -182,11 +182,12 @@ window.Shell = (() => {
   }
 
   // ---------- live cross-device balance sync ----------
-  // Pushes the current cash balance to Firebase the instant it changes, and listens for
-  // changes made by OTHER devices on the same account, applying them here in near real time.
-  // skipCloudPush guards against an infinite loop: when we receive a live update FROM Firebase
-  // and apply it locally, we must not immediately push it right back up.
+  // Pushes the current cash balance to Firebase the instant it changes, and every open tab on
+  // the same account listens for changes made by OTHER devices, applying them here in near
+  // real time (no manual refresh needed). skipCloudPush stops an infinite loop: when we receive
+  // a live update FROM Firebase, we must not immediately push it right back up.
   let liveBalanceUnsub = null;
+  let liveBalanceRetryTimer = null;
   function pushLiveBalance(amount) {
     const db = getCloudDb();
     const id = getPlayerProfile().id;
@@ -194,9 +195,16 @@ window.Shell = (() => {
     db.ref("balances/" + id).set(amount).catch(() => {});
   }
   function startLiveBalanceSync() {
+    if (liveBalanceUnsub) return; // already listening
     const db = getCloudDb();
     const id = getPlayerProfile().id;
-    if (!db || !id || liveBalanceUnsub) return;
+    if (!db || !id) {
+      // Firebase SDK may not have finished loading/initializing yet when mount() first runs —
+      // keep retrying every second until it's ready, instead of silently giving up forever.
+      clearTimeout(liveBalanceRetryTimer);
+      liveBalanceRetryTimer = setTimeout(startLiveBalanceSync, 1000);
+      return;
+    }
     const ref = db.ref("balances/" + id);
     const handler = (snap) => {
       const val = snap.val();
@@ -206,6 +214,9 @@ window.Shell = (() => {
     };
     ref.on("value", handler);
     liveBalanceUnsub = () => ref.off("value", handler);
+    // Push our current value once at startup too, so a brand-new account (nothing in
+    // balances/{id} yet) seeds Firebase instead of waiting for the next balance change.
+    pushLiveBalance(getCashBalance());
   }
   function addCashBalance(delta) {
     return setCashBalance(getCashBalance() + delta);
@@ -611,21 +622,10 @@ window.Shell = (() => {
     if (!username) return;
     const accts = getAccounts();
     if (!accts[username]) return;
-    const localKnownSavedAt = accts[username].savedAt || 0;
     accts[username].snapshot = snapshotCurrentState();
-    accts[username].savedAt = Date.now();
+    accts[username].savedAt = Date.now(); // NEW — lets other devices know how fresh this copy is
     setAccounts(accts);
-    // Before overwriting Firebase, check if another device already saved something newer
-    // than what THIS tab last knew about. If so, a stale/idle tab (like one left open while
-    // you played on another device) could otherwise clobber real newer progress just because
-    // it happens to save last. Skip the cloud push in that case — this tab's copy is stale.
-    cloudFetchAccount(username).then((cloudAcct) => {
-      if (cloudAcct && (cloudAcct.savedAt || 0) > localKnownSavedAt) {
-        console.warn("Skipped cloud save — a newer save from another device exists.");
-        return;
-      }
-      cloudSaveAccount(username, accts[username]);
-    });
+    cloudSaveAccount(username, accts[username]);
   }
 
   // ---------- register a brand-new account (used by the post-logout Register screen) ----------
@@ -3607,7 +3607,6 @@ window.Shell = (() => {
         if (topEl) topEl.innerHTML = topbarHTML();
         if (sideEl) sideEl.innerHTML = sidebarHTML(activeTab);
         bindChrome();
-        if (window.Chat && typeof window.Chat.mount === "function") window.Chat.mount();
       });
     }
     setupAccountAutosave();
