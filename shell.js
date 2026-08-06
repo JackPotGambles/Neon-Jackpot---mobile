@@ -172,12 +172,40 @@ window.Shell = (() => {
     const n = raw === null ? DEFAULT_BALANCE : parseFloat(raw);
     return isNaN(n) ? DEFAULT_BALANCE : n;
   }
-  function setCashBalance(value) {
+  function setCashBalance(value, skipCloudPush) {
     const n = Math.max(0, Math.round(value * 100) / 100);
     localStorage.setItem(BALANCE_KEY, String(n));
     if (getActiveCurrency() === "cash") document.dispatchEvent(new CustomEvent("nj:balance", { detail: n }));
     bumpSyncFloor(); // every real balance change pushes this account's sync "floor" forward — see SYNC_FLOOR_KEY below
+    if (!skipCloudPush) pushLiveBalance(n);
     return n;
+  }
+
+  // ---------- live cross-device balance sync ----------
+  // Pushes the current cash balance to Firebase the instant it changes, and listens for
+  // changes made by OTHER devices on the same account, applying them here in near real time.
+  // skipCloudPush guards against an infinite loop: when we receive a live update FROM Firebase
+  // and apply it locally, we must not immediately push it right back up.
+  let liveBalanceUnsub = null;
+  function pushLiveBalance(amount) {
+    const db = getCloudDb();
+    const id = getPlayerProfile().id;
+    if (!db || !id) return;
+    db.ref("balances/" + id).set(amount).catch(() => {});
+  }
+  function startLiveBalanceSync() {
+    const db = getCloudDb();
+    const id = getPlayerProfile().id;
+    if (!db || !id || liveBalanceUnsub) return;
+    const ref = db.ref("balances/" + id);
+    const handler = (snap) => {
+      const val = snap.val();
+      if (typeof val !== "number") return;
+      if (Math.round(val * 100) === Math.round(getCashBalance() * 100)) return; // already matches, ignore
+      setCashBalance(val, true); // true = don't push this straight back up to Firebase
+    };
+    ref.on("value", handler);
+    liveBalanceUnsub = () => ref.off("value", handler);
   }
   function addCashBalance(delta) {
     return setCashBalance(getCashBalance() + delta);
@@ -583,10 +611,21 @@ window.Shell = (() => {
     if (!username) return;
     const accts = getAccounts();
     if (!accts[username]) return;
+    const localKnownSavedAt = accts[username].savedAt || 0;
     accts[username].snapshot = snapshotCurrentState();
-    accts[username].savedAt = Date.now(); // NEW — lets other devices know how fresh this copy is
+    accts[username].savedAt = Date.now();
     setAccounts(accts);
-    cloudSaveAccount(username, accts[username]);
+    // Before overwriting Firebase, check if another device already saved something newer
+    // than what THIS tab last knew about. If so, a stale/idle tab (like one left open while
+    // you played on another device) could otherwise clobber real newer progress just because
+    // it happens to save last. Skip the cloud push in that case — this tab's copy is stale.
+    cloudFetchAccount(username).then((cloudAcct) => {
+      if (cloudAcct && (cloudAcct.savedAt || 0) > localKnownSavedAt) {
+        console.warn("Skipped cloud save — a newer save from another device exists.");
+        return;
+      }
+      cloudSaveAccount(username, accts[username]);
+    });
   }
 
   // ---------- register a brand-new account (used by the post-logout Register screen) ----------
@@ -3572,6 +3611,7 @@ window.Shell = (() => {
       });
     }
     setupAccountAutosave();
+    startLiveBalanceSync();
   }
 
   // Periodically snapshots the active account's live state back into the account registry, plus
