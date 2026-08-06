@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Neon Jackpot fictional arcade demo — Bets" />
+    <title>Bets · Neon Jackpot</title>
+    <link rel="stylesheet" href="./shell.css" />
+    <style>
+      .content { max-width: 1180px; margin: auto; padding: 34px 32px 60px; }
+      .bets-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; flex-wrap: wrap; }
+      .bets-title { display: flex; align-items: center; gap: 9px; font-size: 19px; font-weight: 800; letter-spacing: -.03em; }
+      .bets-title svg { width: 18px; height: 18px; color: var(--mint); }
+      .export-btn { display: flex; align-items: center; gap: 7px; padding: 10px 14px; color: #04140f; background: #3aa0ff; border: 0; border-radius: 10px; font-size: 11px; font-weight: 800; }
+      .export-btn svg { width: 14px; height: 14px; }
+
+      .bets-layout { display: grid; grid-template-columns: 160px 1fr; gap: 16px; align-items: start; }
+      .bets-side { display: grid; gap: 6px; }
+      .bets-side button { display: flex; align-items: center; gap: 8px; padding: 11px 13px; color: #8791a6; background: #121522; border: 1px solid var(--line); border-radius: 10px; font-size: 12px; font-weight: 700; text-align: left; }
+      .bets-side button.active { color: #04140f; background: #3aa0ff; border-color: transparent; }
+      .bets-side button svg { width: 14px; height: 14px; }
+
+      .bets-toolbar { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+      .bets-search { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 180px; padding: 10px 12px; color: #768197; background: #121522; border: 1px solid var(--line); border-radius: 10px; }
+      .bets-search input { width: 100%; color: var(--text); background: none; border: 0; outline: 0; font-size: 12px; }
+      .bets-search svg { width: 14px; height: 14px; flex: none; }
+      .bets-select { display: flex; align-items: center; gap: 8px; padding: 10px 12px; color: #b6bfd2; background: #121522; border: 1px solid var(--line); border-radius: 10px; font-size: 11.5px; }
+      .bets-select select { color: var(--text); background: none; border: 0; outline: 0; font: inherit; }
+
+      .bets-table-wrap { background: #121522; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+      .bets-table { width: 100%; border-collapse: collapse; }
+      .bets-table th { padding: 13px 16px; color: #69758c; background: rgba(255,255,255,.02); font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; text-align: left; }
+      .bets-table td { padding: 13px 16px; border-top: 1px solid var(--line); font-size: 12px; color: #cdd4e2; }
+      .bets-table tr:nth-child(odd) td { background: rgba(255,255,255,.012); }
+      .bet-row { cursor: pointer; }
+      .bet-row:hover td { background: rgba(58,160,255,.06); }
+      .bet-row:focus-visible td { outline: 1px solid #3aa0ff; outline-offset: -1px; }
+      .bet-game-link { color: #cdd4e2; }
+      .bet-row:hover .bet-game-link { color: #3aa0ff; }
+      .bet-id { color: #69758c; font-family: var(--mono); font-size: 10.5px; }
+      .bet-game { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+      .bet-game-icon { display: grid; place-items: center; width: 22px; height: 22px; color: #04140f; background: var(--mint); border-radius: 6px; flex: none; }
+      .bet-game-icon svg { width: 12px; height: 12px; }
+      .bet-date { color: #8791a6; font-family: var(--mono); font-size: 10.5px; }
+      .bet-amt { font-family: var(--mono); font-weight: 700; }
+      .bet-mult { font-family: var(--mono); color: #8791a6; }
+      .bet-payout.win { color: var(--mint); font-family: var(--mono); font-weight: 700; }
+      .bet-payout.loss { color: #69758c; font-family: var(--mono); }
+      .bets-empty { padding: 60px 20px; color: #69758c; text-align: center; font-size: 12.5px; }
+
+      @media (max-width: 760px) {
+        .content { padding: 24px 16px 40px; }
+        .bets-layout { grid-template-columns: 1fr; }
+        .bets-side { display: flex; }
+        .bets-table th:nth-child(3), .bets-table td:nth-child(3) { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="site-shell">
+      <div class="site-grid">
+        <div id="site-sidebar"></div>
+        <div id="site-topbar"></div>
+        <div id="page-content"></div>
+      </div>
+    </div>
+    <script src="./promo-vault.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="./chat.js"></script>
+    <script src="./shell.js"></script>
+    <script src="./games.js"></script>
+    <script>
+      (() => {
+        Shell.mount({ activeTab: "Bets" });
+        Chat.mount();
+        const content = document.getElementById("page-content");
+        const svg = Shell.svg;
+        const catalog = Array.isArray(window.GAME_CATALOG) ? window.GAME_CATALOG : [];
+
+        const state = { query: "", game: "all", sort: "recent" };
+
+        function gameName(id) {
+          const g = catalog.find((x) => x.id === id);
+          return g ? g.name : (id || "Unknown");
+        }
+
+        function fmtDate(ts) {
+          const d = new Date(ts);
+          return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + ", " + d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+        }
+
+        function rowHTML(bet, id) {
+          const payout = bet.won ? (bet.bet + bet.profit) : 0;
+          const mult = bet.bet > 0 ? (payout / bet.bet) : 0;
+          return `<tr class="bet-row" data-bet-row="${id}" tabindex="0">
+            <td class="bet-id">${id}</td>
+            <td><div class="bet-game bet-game-link"><span class="bet-game-icon">${svg("spark")}</span>${gameName(bet.game)}</div></td>
+            <td class="bet-date">${fmtDate(bet.time)}</td>
+            <td class="bet-amt">${Shell.fmtMoney(bet.bet || 0)}</td>
+            <td class="bet-mult">${mult.toFixed(2)}x</td>
+            <td class="bet-payout ${payout > 0 ? "win" : "loss"}">${Shell.fmtMoney(payout)}</td>
+          </tr>`;
+        }
+
+        function betId(bet, i) {
+          // stable pseudo-id derived from time + index, purely cosmetic
+          return (bet.time || 0).toString(16).slice(-8) + i.toString(16).padStart(2, "0") + "…";
+        }
+
+        function render() {
+          let log = Shell.getBetLog().map((b, i) => ({ ...b, _id: betId(b, i) }));
+          if (state.game !== "all") log = log.filter((b) => b.game === state.game);
+          if (state.query.trim()) log = log.filter((b) => b._id.toLowerCase().includes(state.query.trim().toLowerCase()));
+          function multOf(b) {
+            const payout = b.won ? (b.bet + b.profit) : 0;
+            return b.bet > 0 ? (payout / b.bet) : 0;
+          }
+          log = log.slice().sort((a, b) => {
+            if (state.sort === "recent") return b.time - a.time;
+            if (state.sort === "oldest") return a.time - b.time;
+            if (state.sort === "profit") return b.profit - a.profit;
+            if (state.sort === "multiplier") return multOf(b) - multOf(a);
+            return 0;
+          });
+
+          const gameOptions = ["all", ...new Set(Shell.getBetLog().map((b) => b.game).filter(Boolean))];
+
+          content.innerHTML = `<div class="content">
+            <div class="bets-head">
+              <div class="bets-title">${svg("list")} Bets</div>
+              <button class="export-btn" data-export>${svg("activity")} Export as CSV</button>
+            </div>
+            <div class="bets-layout">
+              <div class="bets-side">
+                <button class="active">${svg("wallet")} Casino</button>
+              </div>
+              <div>
+                <div class="bets-toolbar">
+                  <label class="bets-search">${svg("search")}<input placeholder="Bet ID" value="${state.query}" data-bets-search></label>
+                  <label class="bets-select">Game:
+                    <select data-bets-game>${gameOptions.map((g) => `<option value="${g}" ${state.game === g ? "selected" : ""}>${g === "all" ? "All" : gameName(g)}</option>`).join("")}</select>
+                  </label>
+                  <label class="bets-select">Sort By:
+                    <select data-bets-sort>
+                      <option value="recent" ${state.sort === "recent" ? "selected" : ""}>Recent</option>
+                      <option value="oldest" ${state.sort === "oldest" ? "selected" : ""}>Oldest</option>
+                      <option value="profit" ${state.sort === "profit" ? "selected" : ""}>Highest Profit</option>
+                      <option value="multiplier" ${state.sort === "multiplier" ? "selected" : ""}>Highest Multiplier</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="bets-table-wrap">
+                  ${log.length ? `<table class="bets-table">
+                    <thead><tr><th>ID</th><th>Game</th><th>Date</th><th>Bet</th><th>Multiplier</th><th>Payout</th></tr></thead>
+                    <tbody>${log.map((b) => rowHTML(b, b._id)).join("")}</tbody>
+                  </table>` : `<div class="bets-empty">No bets placed yet. Go play a round!</div>`}
+                </div>
+              </div>
+            </div>
+          </div>`;
+
+          content.querySelectorAll("[data-bet-row]").forEach((row) => {
+            const open = () => {
+              const bet = log.find((b) => b._id === row.dataset.betRow);
+              if (bet) Shell.openBetDetailModal(bet, gameName(bet.game));
+            };
+            row.addEventListener("click", open);
+            row.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+          });
+          content.querySelector("[data-bets-search]").addEventListener("input", (e) => { state.query = e.target.value; render(); requestAnimationFrame(() => content.querySelector("[data-bets-search]")?.focus()); });
+          content.querySelector("[data-bets-game]").addEventListener("change", (e) => { state.game = e.target.value; render(); });
+          content.querySelector("[data-bets-sort]").addEventListener("change", (e) => { state.sort = e.target.value; render(); });
+          content.querySelector("[data-export]").addEventListener("click", () => {
+            const rows = [["ID", "Game", "Date", "Bet", "Multiplier", "Payout"]];
+            log.forEach((b) => {
+              const payout = b.won ? (b.bet + b.profit) : 0;
+              const mult = b.bet > 0 ? (payout / b.bet) : 0;
+              rows.push([b._id, gameName(b.game), new Date(b.time).toISOString(), (b.bet || 0).toFixed(2), mult.toFixed(2), payout.toFixed(2)]);
+            });
+            const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+            const blob = new Blob([csv], { type: "text/csv" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "neon-jackpot-bets.csv";
+            a.click();
+            URL.revokeObjectURL(a.href);
+          });
+        }
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

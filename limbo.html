@@ -1,0 +1,985 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Neon Jackpot fictional arcade demo — Limbo" />
+    <title>Limbo · Neon Jackpot</title>
+    <link rel="stylesheet" href="./shell.css" />
+    <style>
+      /* ===== limbo game shell (lives inside #page-content, below the shared topbar/sidebar) ===== */
+      .game-page { padding: 22px 22px 30px; }
+      .game-shell { position: relative; width: 100%; max-width: 1196px; margin: 0 auto; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 30px 80px rgba(0,0,0,.45); }
+      .shell-grid { display: grid; grid-template-columns: 334px 1fr; grid-template-rows: auto 1fr auto; min-height: 620px; }
+
+      .sidebar { grid-row: 1 / 3; grid-column: 1; padding: 18px 20px 20px; border-right: 1px solid var(--line); background: linear-gradient(180deg, rgba(15,18,32,.9), rgba(9,10,18,.6)); overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+      .sidebar::-webkit-scrollbar { display: none; }
+      .mode-toggle { display: flex; padding: 4px; background: #0c0e18; border: 1px solid var(--line); border-radius: 12px; }
+      .mode-btn { flex: 1; padding: 9px 0; color: #7c88a0; background: transparent; border: 0; border-radius: 9px; font-size: 12px; font-weight: 800; transition: background .15s ease, color .15s ease; }
+      .mode-btn.active { color: #04140f; background: var(--blue, #3aa0ff); box-shadow: 0 0 16px rgba(58,160,255,.4); }
+      .field-label { margin: 18px 0 8px; color: #8791a6; font-size: 11px; font-weight: 600; }
+      .field-label.row { display: flex; align-items: center; justify-content: space-between; }
+      .bet-input-row { position: relative; display: flex; align-items: center; }
+      .bet-input-row input { width: 100%; padding: 13px 90px 13px 26px; color: var(--text); background: #0c0e18; border: 1px solid var(--line); border-radius: 11px; font-size: 14px; }
+      .bet-input-row input::placeholder { color: #55617a; }
+      .bet-input-row .prefix { position: absolute; left: 14px; color: #55617a; font-size: 14px; pointer-events: none; }
+      .bet-quick { position: absolute; right: 6px; display: flex; gap: 5px; }
+      .bet-quick button { padding: 6px 9px; color: #b6bfd2; background: #1b2032; border: 1px solid var(--line); border-radius: 7px; font-size: 10px; font-weight: 700; }
+      .bet-quick button.active, .bet-quick button:hover { color: #04140f; background: var(--mint); border-color: transparent; }
+      .bet-input-row input.error { border-color: rgba(255,110,143,.55); }
+      .balance-error { margin: 7px 2px 0; color: var(--red); font-size: 11px; font-weight: 700; }
+
+      .plain-input-row { position: relative; display: flex; align-items: center; }
+      .plain-input-row input { width: 100%; padding: 12px 14px; color: var(--text); background: #0c0e18; border: 1px solid var(--line); border-radius: 11px; font-size: 13px; font-family: var(--mono); }
+      .plain-input-row input.greyed { color: #5c6680; }
+      .plain-input-row .infinity-icon { position: absolute; left: 13px; color: #5c6680; font-size: 13px; pointer-events: none; }
+      .plain-input-row input.with-icon { padding-left: 30px; }
+      .reset-chip { position: absolute; left: 8px; display: flex; align-items: center; gap: 5px; padding: 5px 8px; color: #8791a6; background: #171c2c; border: 1px solid var(--line); border-radius: 7px; font-size: 9.5px; font-weight: 700; }
+      .reset-chip:hover { color: #fff; }
+      .win-loss-row { position: relative; display: flex; align-items: center; }
+      .win-loss-row input { width: 100%; padding: 12px 70px 12px 90px; color: var(--text); background: #0c0e18; border: 1px solid var(--line); border-radius: 11px; font-size: 13px; font-family: var(--mono); text-align: right; }
+      .win-loss-label { position: absolute; left: 10px; color: #5c6680; font-size: 10px; font-weight: 700; pointer-events: none; text-transform: none; }
+      .win-loss-suffix { position: absolute; right: 12px; color: #5c6680; font-size: 12px; pointer-events: none; }
+      .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .stop-input-row { position: relative; display: flex; align-items: center; }
+      .stop-input-row input { width: 100%; padding: 12px 14px; color: var(--text); background: #0c0e18; border: 1px solid var(--line); border-radius: 11px; font-size: 13px; font-family: var(--mono); }
+      .auto-info-box { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin-top: 16px; overflow: hidden; background: var(--line); border: 1px solid var(--line); border-radius: 11px; }
+      .auto-info-box div { padding: 10px 12px; background: rgba(16,18,31,.8); }
+      .auto-info-box span { display: block; color: #6d7891; font-family: var(--mono); font-size: 8.5px; text-transform: uppercase; }
+      .auto-info-box strong { display: block; margin-top: 5px; font-size: 13px; }
+      .bet-count-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; color: #8791a6; background: #171c2c; border-radius: 6px; font-family: var(--mono); font-size: 9.5px; }
+
+      .place-bet-btn { width: 100%; margin-top: 16px; padding: 14px 0; color: #04140f; background: linear-gradient(120deg, var(--mint), #7ad9ff); border: 0; border-radius: 12px; font-size: 13px; font-weight: 800; letter-spacing: -.01em; box-shadow: 0 10px 26px rgba(92,255,231,.22); transition: transform .1s ease, opacity .15s ease; }
+      .place-bet-btn:active { transform: scale(.985); }
+      .place-bet-btn.demo { background: var(--blue, #3aa0ff); box-shadow: 0 10px 26px rgba(58,160,255,.25); }
+      .place-bet-btn:disabled { color: #6c7488; background: #1b2032; box-shadow: none; cursor: not-allowed; }
+      .place-bet-btn.busy { opacity: .75; cursor: progress; }
+      .place-bet-btn.stop { background: linear-gradient(120deg, var(--red), #ff9fb8); box-shadow: 0 10px 26px rgba(255,110,143,.25); }
+      .demo-hint-wrap { position: relative; display: flex; justify-content: center; }
+      .demo-hint { margin-top: 9px; color: #6d7891; font-size: 10px; text-align: center; }
+      .sidebar-meta { display: grid; gap: 8px; margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
+      .sidebar-meta-row { display: flex; justify-content: space-between; color: #6d7891; font-size: 10px; }
+      .sidebar-meta-row strong { color: #b6bfd2; font-family: var(--mono); font-weight: 500; }
+      .field-tooltip { position: relative; }
+      .field-tooltip::after { content: attr(data-tooltip); position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%) translateY(4px); width: max-content; max-width: 210px; padding: 7px 10px; color: #ffd7de; background: #2a1420; border: 1px solid rgba(255,110,143,.4); border-radius: 8px; font-size: 10px; line-height: 1.4; text-align: center; opacity: 0; pointer-events: none; transition: opacity .15s ease, transform .15s ease; z-index: 6; }
+      .field-tooltip.show::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+      .hover-tip { position: relative; }
+      .hover-tip::after { content: attr(data-hover-tip); position: absolute; left: 50%; top: calc(100% + 9px); transform: translateX(-50%) translateY(-4px); width: max-content; max-width: 180px; padding: 6px 9px; color: #d5dbe8; background: #1a1e30; border: 1px solid var(--line); border-radius: 7px; font-size: 10px; line-height: 1.3; text-align: center; opacity: 0; pointer-events: none; transition: opacity .12s ease, transform .12s ease; z-index: 300; }
+      .hover-tip:hover::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+      /* title bar — now just the back link + game name + fair-play button */
+      .title-bar { grid-row: 1; grid-column: 2; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 20px; border-bottom: 1px solid var(--line); background: rgba(10,12,20,.7); }
+      .title-bar .game-icon-btn { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; color: #7c88a0; background: transparent; border: 0; border-radius: 7px; }
+      .title-bar .game-icon-btn:hover { color: var(--text); background: rgba(255,255,255,.06); }
+      .title-bar .game-icon-btn svg { width: 16px; height: 16px; }
+      .title-name { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; }
+      .title-name .x { color: var(--blue, #3aa0ff); }
+      .fair-play-btn { display: flex; align-items: center; gap: 7px; margin-left: auto; padding: 7px 11px; color: #b6f7ea; background: rgba(92,255,231,.08); border: 1px solid rgba(92,255,231,.28); border-radius: 999px; font-size: 11px; font-weight: 700; }
+      .fair-play-btn svg { width: 13px; height: 13px; }
+
+      /* game box */
+      .game-box { grid-row: 2; grid-column: 2; position: relative; display: flex; flex-direction: column; padding: 20px; min-height: 460px; background:
+        radial-gradient(circle at 18% 8%, rgba(58,160,255,.05), transparent 40%),
+        radial-gradient(circle at 82% 90%, rgba(255,114,178,.04), transparent 45%), #0b0d17; }
+      .game-box::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5; background-image: radial-gradient(circle, rgba(255,255,255,.4) .6px, transparent .6px); background-size: 26px 26px; mask-image: radial-gradient(circle at 50% 30%, black, transparent 70%); }
+
+      .recent-row { position: relative; z-index: 1; display: flex; justify-content: flex-end; gap: 6px; min-height: 24px; }
+      .recent-chip { padding: 5px 9px; color: #aeb8ca; background: #161a29; border: 1px solid var(--line); border-radius: 7px; font-family: var(--mono); font-size: 10px; font-weight: 600; opacity: 0; transform: translateY(-4px); animation: chip-in .25s ease forwards; }
+      .recent-chip.win { color: #04140f; background: var(--mint); border-color: transparent; }
+      @keyframes chip-in { to { opacity: 1; transform: translateY(0); } }
+
+      .stage { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+      .demo-bubble { display: flex; align-items: center; gap: 6px; padding: 6px 12px; color: #cfe1ff; background: #171c30; border: 1px solid rgba(58,160,255,.35); border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 8px 20px rgba(0,0,0,.3); }
+      .demo-bubble.win-preview { color: var(--mint); border-color: rgba(92,255,231,.4); }
+      .multi-box { position: relative; display: grid; place-items: center; width: 250px; height: 130px; background: linear-gradient(160deg, #191f34, #12162880); border: 1px solid var(--line); border-radius: 18px; box-shadow: inset 0 0 40px rgba(0,0,0,.35); overflow: hidden; transition: transform .16s cubic-bezier(.4,0,.2,1), border-color .3s ease, box-shadow .3s ease; }
+      .multi-box.armed { transform: scale(.94); }
+      .multi-box.win-fill { border-color: rgba(92,255,231,.5); box-shadow: inset 0 0 60px rgba(92,255,231,.3), 0 0 40px rgba(92,255,231,.25); }
+      .water-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0%; background: linear-gradient(180deg, rgba(92,255,231,.32), rgba(92,255,231,.1)); transition: height .5s cubic-bezier(.22,.9,.3,1), background .3s ease; pointer-events: none; }
+      .multi-box.win-fill .water-fill { background: linear-gradient(180deg, rgba(92,255,231,.85), rgba(92,255,231,.5)); }
+      .water-fill::before { content: ""; position: absolute; top: -3px; left: 0; right: 0; height: 6px; background: repeating-linear-gradient(90deg, rgba(255,255,255,.6) 0 10px, transparent 10px 20px); opacity: .5; animation: water-shimmer 1.2s linear infinite; }
+      @keyframes water-shimmer { from { background-position-x: 0; } to { background-position-x: 40px; } }
+      .multi-value { position: relative; z-index: 1; font-family: var(--sans); font-size: 44px; font-weight: 800; letter-spacing: -.02em; color: #fff; transition: color .2s ease; }
+      .multi-value.win { color: #04140f; text-shadow: none; }
+      .multi-value.lose { color: var(--red); }
+
+      .stat-fields { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 20px; width: 100%; max-width: 520px; }
+      .stat-field label { display: block; margin-bottom: 7px; color: #8791a6; font-size: 11px; font-weight: 600; }
+      .stat-field-row { position: relative; display: flex; align-items: center; }
+      .stat-field-row input { width: 100%; padding: 13px 40px 13px 14px; color: var(--text); background-color: #0c0e18; border: 1px solid var(--line); border-radius: 11px; font-size: 14px; font-family: var(--mono); }
+      .stat-field-row .suffix { position: absolute; right: 13px; color: #6d7891; font-size: 12px; pointer-events: none; }
+      .stat-field-row .clear-x { position: absolute; right: 10px; display: grid; place-items: center; width: 20px; height: 20px; color: #6d7891; background: none; border: 0; border-radius: 5px; }
+      .stat-field-row .clear-x:hover { color: #fff; background: rgba(255,255,255,.08); }
+      .stat-field-row input.error { border-color: rgba(255,110,143,.55); }
+
+      /* bottom bar */
+      .bottom-bar { position: relative; grid-row: 3; grid-column: 1 / 3; display: flex; align-items: center; min-height: 54px; padding: 0 18px; border-top: 1px solid var(--line); background: rgba(9,10,18,.75); }
+      .bottom-icons { display: flex; align-items: center; gap: 8px; }
+      .bottom-icon-btn { position: relative; display: grid; place-items: center; width: 32px; height: 32px; color: #8490a8; background: #12152680; border: 1px solid var(--line); border-radius: 9px; }
+      .bottom-icon-btn svg { width: 15px; height: 15px; }
+      .bottom-icon-btn:hover, .bottom-icon-btn.active { color: var(--mint); border-color: rgba(92,255,231,.3); }
+      .bottom-icon-btn.fav-on { color: var(--pink); border-color: rgba(255,114,178,.4); }
+      .bottom-logo { position: absolute; left: 50%; transform: translateX(-50%); color: #4c566c; font-size: 15px; font-weight: 700; font-style: italic; letter-spacing: -.02em; opacity: .55; }
+
+      /* settings popover */
+      .popover { position: absolute; left: 0; bottom: calc(100% + 10px); width: 232px; padding: 14px; background: #12152f; border: 1px solid var(--line); border-radius: 13px; box-shadow: 0 16px 40px rgba(0,0,0,.45); z-index: 20; }
+      .popover-title { margin: 0 0 10px; color: #97a1b6; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+      .popover-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 2px; }
+      .popover-row span { font-size: 11.5px; color: #d5dbe8; }
+      .switch { position: relative; width: 34px; height: 19px; background: #262c42; border: 0; border-radius: 999px; transition: background .15s ease; }
+      .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; background: #cfd6e5; border-radius: 50%; transition: transform .15s ease, background .15s ease; }
+      .switch.on { background: var(--mint); }
+      .switch.on::after { transform: translateX(15px); background: #04140f; }
+      .volume-row { display: block; padding: 8px 2px 4px; }
+      .volume-row span { display: block; margin-bottom: 8px; }
+      .volume-row input[type="range"] { width: 100%; accent-color: var(--mint); }
+
+      /* live stats popover — always-on-top, taller/narrower, draggable */
+      .stats-panel { position: fixed; width: 360px; max-width: calc(100vw - 32px); padding: 18px; background: #12152f; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.55); z-index: 999; user-select: none; }
+      .stats-panel.dragging { box-shadow: 0 30px 80px rgba(0,0,0,.7); }
+      .stats-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; cursor: grab; }
+      .stats-panel.dragging .stats-head { cursor: grabbing; }
+      .stats-head span { color: #6d7891; font-family: var(--mono); font-size: 9px; text-transform: uppercase; }
+      .stats-head-actions { display: flex; align-items: center; gap: 6px; }
+      .stats-reset { display: grid; place-items: center; width: 24px; height: 24px; color: #8791a6; background: rgba(255,255,255,.05); border: 0; border-radius: 7px; }
+      .stats-reset:hover { color: var(--red); background: rgba(255,110,143,.12); }
+      .stats-reset svg { width: 12px; height: 12px; }
+      .stats-close { display: grid; place-items: center; width: 24px; height: 24px; color: #8791a6; background: rgba(255,255,255,.05); border: 0; border-radius: 7px; }
+      .stats-close:hover { color: #fff; background: rgba(255,255,255,.12); }
+      .stats-game-dropdown { position: relative; margin-bottom: 12px; }
+      .stats-game-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 9px 12px; color: var(--text); background: #0c0e18; border: 1px solid var(--line); border-radius: 9px; font-size: 12px; font-weight: 700; }
+      .stats-game-toggle svg { width: 14px; height: 14px; color: #7c88a0; }
+      .stats-game-toggle:hover { border-color: rgba(92,255,231,.35); }
+      .stats-game-menu { position: absolute; left: 0; right: 0; top: calc(100% + 6px); padding: 4px; background: #171b2c; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 14px 30px rgba(0,0,0,.4); z-index: 10; }
+      .stats-game-menu button { display: block; width: 100%; padding: 8px 10px; color: #b6bfd2; background: transparent; border: 0; border-radius: 7px; font-size: 12px; font-weight: 600; text-align: left; }
+      .stats-game-menu button:hover { background: rgba(255,255,255,.06); color: #fff; }
+      .stats-game-menu button.active { color: #04140f; background: var(--mint); }
+      .stats-profit { font-size: 24px; font-weight: 800; letter-spacing: -.03em; }
+      .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0; }
+      .stats-grid div { padding: 9px; background: rgba(255,255,255,.03); border-radius: 8px; }
+      .stats-grid span { display: block; color: #6d7891; font-family: var(--mono); font-size: 7.5px; text-transform: uppercase; }
+      .stats-grid strong { font-size: 13px; }
+      .stats-chart-box { position: relative; height: 230px; overflow: hidden; background: #0c0e18; border: 1px solid var(--line); border-radius: 9px; cursor: crosshair; }
+      .stats-chart { position: absolute; inset: 0; width: 100%; height: 100%; }
+      .stats-area-up { fill: rgba(92,255,231,.16); stroke: none; }
+      .stats-area-down { fill: rgba(255,110,143,.14); stroke: none; }
+      .stats-line-up { fill: none; stroke: var(--mint); stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+      .stats-line-down { fill: none; stroke: var(--red); stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+      .stats-baseline { stroke: rgba(150,166,207,.25); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 3 3; }
+      .stats-hover-line { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(238,243,248,.35); pointer-events: none; display: none; }
+      .stats-hover-dot { position: absolute; width: 8px; height: 8px; margin-left: -4px; margin-top: -4px; border-radius: 50%; border: 2px solid #0c0e18; pointer-events: none; display: none; }
+      .stats-hover-dot.up { background: var(--mint); }
+      .stats-hover-dot.down { background: var(--red); }
+      .stats-hover-tooltip { position: absolute; padding: 5px 9px; color: #eef3f8; background: #1a1e30; border: 1px solid var(--line); border-radius: 7px; font-family: var(--mono); font-size: 10.5px; font-weight: 700; white-space: nowrap; pointer-events: none; transform: translate(-50%, -100%); margin-top: -8px; display: none; z-index: 5; }
+
+      .positive { color: var(--mint) !important; } .negative { color: var(--red) !important; }
+
+      /* modals */
+      .modal-overlay { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(4,5,10,.72); backdrop-filter: blur(3px); z-index: 200; animation: fade-in .15s ease; }
+      @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+      .modal-box { width: 100%; max-width: 420px; padding: 22px; background: #12152f; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+      .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+      .modal-head h3 { margin: 0; font-size: 15px; font-weight: 800; }
+      .modal-close { display: grid; place-items: center; width: 26px; height: 26px; color: #8791a6; background: rgba(255,255,255,.05); border: 0; border-radius: 8px; }
+      .modal-close:hover { color: #fff; background: rgba(255,255,255,.12); }
+      .modal-box p { margin: 0 0 10px; color: #a3aec2; font-size: 12px; line-height: 1.65; }
+      .modal-box .modal-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+      .modal-box .modal-stats div { padding: 10px 12px; background: rgba(255,255,255,.03); border-radius: 9px; }
+      .modal-box .modal-stats span { display: block; color: #6d7891; font-family: var(--mono); font-size: 8px; text-transform: uppercase; }
+      .modal-box .modal-stats strong { display: block; margin-top: 5px; font-size: 13px; }
+      .seed-row { display: flex; gap: 8px; margin-top: 6px; }
+      .seed-row input { flex: 1; padding: 12px 14px; color: var(--text); background: #0c0e18; border: 1px solid var(--line); border-radius: 10px; font-size: 12px; font-family: var(--mono); }
+      .seed-randomize { display: flex; align-items: center; gap: 7px; padding: 0 14px; color: #04140f; background: var(--mint); border: 0; border-radius: 10px; font-size: 11px; font-weight: 800; }
+      .seed-randomize svg { width: 13px; height: 13px; }
+      .seed-randomize.spin svg { animation: spin .5s linear; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .seed-note { margin-top: 12px; color: #5c6680; font-size: 10px; }
+
+      @media (max-width: 900px) {
+        .shell-grid { grid-template-columns: 1fr; grid-template-rows: auto auto auto auto; }
+        .sidebar { grid-row: 2; grid-column: 1; border-right: 0; border-top: 1px solid var(--line); order: 2; }
+        .title-bar { grid-row: 1; grid-column: 1; }
+        .game-box { grid-row: 3; grid-column: 1; min-height: 380px; }
+        .bottom-bar { grid-row: 4; grid-column: 1; }
+        .multi-box { width: 200px; height: 108px; }
+        .multi-value { font-size: 34px; }
+        .stats-panel { width: calc(100vw - 32px); }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="site-shell">
+      <div class="site-grid">
+        <div id="site-sidebar"></div>
+        <div id="site-topbar"></div>
+        <div id="page-content"></div>
+      </div>
+    </div>
+    <script src="./promo-vault.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="./chat.js"></script>
+    <script src="./shell.js"></script>
+    <script src="./games.js"></script>
+    <script>
+      (() => {
+        Shell.mount({ activeTab: "Games" });
+        Chat.mount();
+        document.addEventListener("nj:animations", (e) => { state.settings.animations = !e.detail; render(); });
+
+        const content = document.getElementById("page-content");
+
+        // ---------- config ----------
+        const RTP = 0.99;
+        const MIN_MULTIPLIER = 1.01;
+        const MAX_MULTIPLIER = 100000;
+        const MIN_CHANCE = 0.00099; // %, corresponds to max multiplier
+
+        // ---------- state ----------
+        const state = {
+          mode: "manual", // manual | auto
+          betAmount: "",
+          multiplier: "2.00",
+          chance: "49.50000000",
+          rolling: false,
+          armed: false, // shrink animation while waiting to roll
+          result: null, // { multiplier, win }
+          history: [], // cumulative running profit points (legacy, kept for compatibility)
+          statsGame: "all", // "all" or a specific game id — filters by game actually played
+          statsGameDropdownOpen: false,
+          statsDrag: null, // { offsetX, offsetY } while dragging the panel
+          wins: 0,
+          losses: 0,
+          wagered: 0,
+          recent: [],
+          favorite: Shell.getFavorites().includes("limbo"),
+          settings: { instantPlay: false, maxBet: false, animations: !Shell.isAnimationsDisabled(), volume: 100 },
+          settingsOpen: false,
+          statsOpen: false,
+          statsPos: null,
+          tooltip: { multiplier: false, chance: false },
+          infoOpen: false,
+          fairPlayOpen: false,
+          clientSeed: "9f2a-71cd-33be-a04e",
+          seedSpinning: false,
+          fill: 0, // 0..100 water fill %
+
+          // auto mode
+          auto: {
+            running: false,
+            numBets: "", // "" = infinite
+            betsRemaining: null,
+            onWinAction: "reset", // reset | increase
+            onWinPct: "0.00",
+            onLossAction: "reset",
+            onLossPct: "0.00",
+            stopOnProfit: "",
+            stopOnLoss: "",
+            currentProfit: 0,
+            lastGameProfit: 0,
+            baseBet: null,
+          },
+        };
+
+        const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+        const fmtChance = (n) => n.toFixed(8);
+        const fmtMulti = (n) => n.toFixed(2);
+
+        const chanceForMultiplier = (m) => clamp((RTP * 100) / m, MIN_CHANCE, 100);
+        const multiplierForChance = (c) => clamp((RTP * 100) / c, MIN_MULTIPLIER, MAX_MULTIPLIER);
+
+        // ---------- sound ----------
+        let audioCtx = null;
+        const getCtx = () => { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); return audioCtx; };
+        const vol = () => state.settings.volume / 100;
+
+        function playShuffleTick() {
+          if (!state.settings.animations || vol() <= 0) return;
+          const ctx = getCtx();
+          const bufferSize = ctx.sampleRate * 0.02;
+          const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+          const src = ctx.createBufferSource();
+          src.buffer = buffer;
+          const gain = ctx.createGain();
+          gain.gain.value = 0.06 * vol();
+          const filter = ctx.createBiquadFilter();
+          filter.type = "highpass";
+          filter.frequency.value = 1800;
+          src.connect(filter).connect(gain).connect(ctx.destination);
+          src.start();
+        }
+
+        function playDing() {
+          if (vol() <= 0) return;
+          const ctx = getCtx();
+          const now = ctx.currentTime;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(1760, now);
+          osc.frequency.exponentialRampToValueAtTime(1320, now + 0.35);
+          gain.gain.setValueAtTime(0, now);
+          gain.gain.linearRampToValueAtTime(0.22 * vol(), now + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+          osc.connect(gain).connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.55);
+        }
+
+        function playClick() {
+          if (vol() <= 0) return;
+          const ctx = getCtx();
+          const now = ctx.currentTime;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "square";
+          osc.frequency.setValueAtTime(220, now);
+          gain.gain.setValueAtTime(0.09 * vol(), now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+          osc.connect(gain).connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.08);
+        }
+
+        // ---------- svg icons ----------
+        const svg = (name) => `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">${({
+          back: '<path d="M15 6l-6 6 6 6"/>',
+          x: '<path d="M6 6l12 12M18 6L6 18"/>',
+          info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/>',
+          shield: '<path d="M12 3 5 6v5c0 4.7 3 8.2 7 10 4-1.8 7-5.3 7-10V6l-7-3Z"/>',
+          gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z"/>',
+          activity: '<path d="M3 12h4l2-7 4 14 2-7h6"/>',
+          heart: '<path d="M20.8 8.8c0 5.2-8.8 10-8.8 10s-8.8-4.8-8.8-10A4.5 4.5 0 0 1 12 6.5a4.5 4.5 0 0 1 8.8 2.3Z"/>',
+          rotate: '<path d="M4 12a8 8 0 0 1 14-5l2 2M20 12a8 8 0 0 1-14 5l-2-2"/><path d="M20 5v4h-4M4 19v-4h4"/>',
+          reset: '<path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/>',
+          chevronDown: '<path d="m7 10 5 5 5-5"/>',
+        }[name] || '<circle cx="12" cy="12" r="8"/>')}</svg>`;
+
+        // "game" here is a game id (or "all"); bet log is shared/persisted across all games via Shell,
+        // so it survives navigating between game pages and only clears via the explicit reset button.
+        // KNOWN_GAME_IDS guards against stray entries logged under an unrecognized id (e.g. if
+        // _game-template.html were ever opened directly with its placeholder identity still in
+        // place) so a bad past entry can't keep surfacing in the stats graph.
+        const KNOWN_GAME_IDS = new Set((Array.isArray(window.GAME_CATALOG) ? window.GAME_CATALOG : []).map((g) => g.id));
+        function filteredBetLog(game) {
+          const log = Shell.getBetLog().filter((b) => KNOWN_GAME_IDS.has(b.game));
+          if (!log.length) return [];
+          return !game || game === "all" ? log : log.filter((b) => b.game === game);
+        }
+        function playedGamesList() {
+          const seen = new Set(Shell.getBetLog().map((b) => b.game).filter((g) => KNOWN_GAME_IDS.has(g)));
+          return Array.from(seen);
+        }
+
+        // ---------- stats panel dragging (bound once; reads state.statsDrag live) ----------
+        window.addEventListener("mousemove", (e) => {
+          if (!state.statsDrag) return;
+          const panel = document.querySelector("[data-stats-popover]");
+          const panelW = panel ? panel.offsetWidth : 460;
+          const panelH = panel ? panel.offsetHeight : 360;
+          let left = e.clientX - state.statsDrag.offsetX;
+          let top = e.clientY - state.statsDrag.offsetY;
+          left = clamp(left, 8, window.innerWidth - panelW - 8);
+          top = clamp(top, 8, window.innerHeight - panelH - 8);
+          state.statsPos = { left, top };
+          if (panel) { panel.style.left = left + "px"; panel.style.top = top + "px"; }
+        });
+        window.addEventListener("mouseup", () => {
+          if (!state.statsDrag) return;
+          state.statsDrag = null;
+          document.querySelector("[data-stats-popover]")?.classList.remove("dragging");
+        });
+
+        // ---------- render ----------
+        function render() {
+          const bet = parseFloat(state.betAmount);
+          const hasBet = state.betAmount !== "" && !isNaN(bet) && bet > 0;
+          const demoMode = !hasBet;
+          const hasFields = state.multiplier !== "" && state.chance !== "";
+          const balance = Shell.getBalance();
+          const insufficientBalance = hasBet && (balance <= 0 || bet > balance);
+          const belowMinBet = hasBet && Shell.isBelowMinBet(bet);
+          const canPlay = hasFields && !state.rolling && !insufficientBalance && !belowMinBet;
+          const btnLabel = hasBet ? "Place Bet" : "Place Demo Bet";
+          const profit = state.history.length ? state.history[state.history.length - 1] : 0;
+          const isPositive = profit >= 0;
+
+          const rangeLog = filteredBetLog(state.statsGame);
+          const rangeProfit = rangeLog.reduce((sum, b) => sum + b.profit, 0);
+          const rangeIsPositive = rangeProfit >= 0;
+          const rangeWagered = rangeLog.reduce((sum, b) => sum + b.bet, 0);
+          const rangeWins = rangeLog.filter((b) => b.won).length;
+          const rangeLosses = rangeLog.filter((b) => !b.won).length;
+          const chart = Shell.chartSvgHTML(rangeLog);
+          window.__limboLastChart = chart;
+          const gameNames = { blackjack: "Blackjack", limbo: "Limbo", dice: "Dice", keno: "Keno", plinko: "Plinko" };
+          const statsPlayedGames = playedGamesList();
+          const statsCurrentLabel = state.statsGame === "all" ? "All" : (gameNames[state.statsGame] || state.statsGame);
+
+          const recentChips = state.recent.slice(-5).reverse().map((r) => `<span class="recent-chip ${r.win ? "win" : ""}">${r.value.toFixed(2)}x</span>`).join("");
+
+          const auto = state.auto;
+          const betsRemainingDisplay = auto.betsRemaining === null ? "" : String(auto.betsRemaining);
+          const numBetsGreyed = auto.numBets.trim() === "";
+
+          content.innerHTML = `
+            <div class="game-page">
+              <div class="game-shell">
+                <div class="shell-grid">
+
+                  <aside class="sidebar">
+                    <div class="mode-toggle">
+                      <button class="mode-btn ${state.mode === "manual" ? "active" : ""}" data-mode="manual" ${auto.running ? "disabled" : ""}>Manual</button>
+                      <button class="mode-btn ${state.mode === "auto" ? "active" : ""}" data-mode="auto" ${state.rolling ? "disabled" : ""}>Auto</button>
+                    </div>
+
+                    <div class="field-label">Bet Amount</div>
+                    <div class="bet-input-row">
+                      <span class="prefix">$</span>
+                      <input type="text" inputmode="decimal" placeholder="0.00" value="${state.betAmount}" data-bet-input class="${(insufficientBalance || belowMinBet) ? "error" : ""}" ${auto.running ? "disabled" : ""}>
+                      <div class="bet-quick">
+                        <button data-half ${auto.running ? "disabled" : ""}>1/2</button>
+                        <button data-double ${auto.running ? "disabled" : ""}>2x</button>
+                      </div>
+                    </div>
+                    ${insufficientBalance ? `<div class="balance-error">Insufficient balance</div>` : (belowMinBet ? `<div class="balance-error">Minimum bet is $0.10</div>` : "")}
+
+                    ${state.mode === "auto" ? `
+                    <div class="field-label row"><span>Number of Bets</span></div>
+                    <div class="plain-input-row">
+                      ${numBetsGreyed ? `<span class="infinity-icon">∞</span>` : ""}
+                      <input type="text" inputmode="numeric" class="${numBetsGreyed ? "greyed with-icon" : ""}" placeholder="Infinite" value="${auto.running ? betsRemainingDisplay : auto.numBets}" data-num-bets ${auto.running ? "disabled" : ""}>
+                    </div>
+
+                    <div class="field-label">On Win</div>
+                    <div class="win-loss-row">
+                      <button class="reset-chip" data-win-action ${auto.running ? "disabled" : ""}>${auto.onWinAction === "reset" ? `${svg("reset")} Reset` : "Increase By"}</button>
+                      <input type="text" inputmode="decimal" value="${auto.onWinAction === "increase" ? auto.onWinPct : "0.00"}" data-win-pct ${auto.onWinAction === "reset" || auto.running ? "disabled" : ""}>
+                      <span class="win-loss-suffix">%</span>
+                    </div>
+
+                    <div class="field-label">On Loss</div>
+                    <div class="win-loss-row">
+                      <button class="reset-chip" data-loss-action ${auto.running ? "disabled" : ""}>${auto.onLossAction === "reset" ? `${svg("reset")} Reset` : "Increase By"}</button>
+                      <input type="text" inputmode="decimal" value="${auto.onLossAction === "increase" ? auto.onLossPct : "0.00"}" data-loss-pct ${auto.onLossAction === "reset" || auto.running ? "disabled" : ""}>
+                      <span class="win-loss-suffix">%</span>
+                    </div>
+
+                    <div class="field-label">Stop Conditions</div>
+                    <div class="two-col">
+                      <div class="stop-input-row"><input type="text" inputmode="decimal" placeholder="0.00" value="${auto.stopOnProfit}" data-stop-profit ${auto.running ? "disabled" : ""}></div>
+                      <div class="stop-input-row"><input type="text" inputmode="decimal" placeholder="0.00" value="${auto.stopOnLoss}" data-stop-loss ${auto.running ? "disabled" : ""}></div>
+                    </div>
+                    <div class="two-col" style="margin-top:5px;">
+                      <span style="font-size:9px;color:#5c6680;">Stop on profit</span>
+                      <span style="font-size:9px;color:#5c6680;">Stop on loss</span>
+                    </div>
+
+                    <div class="auto-info-box">
+                      <div><span>Current Profit</span><strong class="${auto.currentProfit >= 0 ? "positive" : "negative"}">${auto.currentProfit >= 0 ? "+$" : "-$"}${Math.abs(auto.currentProfit).toFixed(2)}</strong></div>
+                      <div><span>Last Game Profit</span><strong class="${auto.lastGameProfit >= 0 ? "positive" : "negative"}">${auto.lastGameProfit >= 0 ? "+$" : "-$"}${Math.abs(auto.lastGameProfit).toFixed(2)}</strong></div>
+                    </div>
+
+                    <div class="demo-hint-wrap">
+                      <button class="place-bet-btn ${auto.running ? "stop" : (hasBet ? "" : "demo")} hover-tip" data-auto-toggle ${(hasFields && !insufficientBalance && !belowMinBet) || auto.running ? "" : "disabled"} ${demoMode ? `data-hover-tip="Enter Bet Amount For Real Play"` : ""}>${auto.running ? "Stop Auto Bet" : (hasBet ? "Start Auto Bet" : "Start Demo Auto Bet")}</button>
+                    </div>
+                    ` : `
+                    <button class="place-bet-btn ${hasBet ? "" : "demo"} ${state.rolling ? "busy" : ""}" data-place ${canPlay ? "" : "disabled"}>${state.rolling ? "Rolling…" : btnLabel}</button>
+                    ${hasBet ? "" : `<div class="demo-hint-wrap"><div class="demo-hint">Enter Bet Amount For Real Play</div></div>`}
+                    `}
+
+                    <div class="sidebar-meta">
+                      <div class="sidebar-meta-row"><span>RTP</span><strong>${(RTP * 100).toFixed(0)}%</strong></div>
+                      <div class="sidebar-meta-row"><span>Max win multiplier</span><strong>${MAX_MULTIPLIER.toLocaleString()}x</strong></div>
+                      <div class="sidebar-meta-row"><span>Chance at max win</span><strong>${MIN_CHANCE.toFixed(5)}%</strong></div>
+                    </div>
+                  </aside>
+
+                  <header class="title-bar">
+                    <button class="game-icon-btn hover-tip" data-hover-tip="Game info" data-info>${svg("info")}</button>
+                    <div class="title-name"><span class="x">${svg("x")}</span> Limbo</div>
+                    <button class="fair-play-btn" data-fair-play>${svg("shield")} Fair Play</button>
+                  </header>
+
+                  <section class="game-box">
+                    <div class="recent-row">${recentChips}</div>
+                    <div class="stage">
+                      ${(() => {
+                        const mult = parseFloat(state.multiplier);
+                        const hasMult = state.multiplier !== "" && !isNaN(mult) && mult > 0;
+                        if (demoMode) return `<div class="demo-bubble">Demo Mode</div>`;
+                        const potentialWin = hasMult ? bet * mult : bet;
+                        return `<div class="demo-bubble win-preview">${Shell.fmtMoney(potentialWin)}</div>`;
+                      })()}
+                      <div class="multi-box ${state.armed ? "armed" : ""} ${state.fill >= 100 ? "win-fill" : ""}" data-multibox>
+                        <div class="water-fill" data-waterfill style="height:${state.fill}%"></div>
+                        <div class="multi-value" data-multivalue>${state.result ? state.result.multiplier.toFixed(2) : "1.00"}x</div>
+                      </div>
+                    </div>
+                    <div class="stat-fields">
+                      <div class="stat-field">
+                        <label>Multiplier</label>
+                        <div class="stat-field-row field-tooltip ${state.tooltip.multiplier ? "show" : ""}" data-tooltip="Minimum multiplier is 1.01">
+                          <input type="text" inputmode="decimal" value="${state.multiplier}" data-multiplier-input class="${state.multiplier === "" ? "error" : ""}" ${auto.running ? "disabled" : ""}>
+                          <button class="clear-x" data-clear-multiplier>${svg("x")}</button>
+                        </div>
+                      </div>
+                      <div class="stat-field">
+                        <label>Chance</label>
+                        <div class="stat-field-row field-tooltip ${state.tooltip.chance ? "show" : ""}" data-tooltip="Chance must be greater than 0.00099">
+                          <input type="text" inputmode="decimal" value="${state.chance}" data-chance-input class="${state.chance === "" ? "error" : ""}" ${auto.running ? "disabled" : ""}>
+                          <span class="suffix">%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <footer class="bottom-bar">
+                    <div class="bottom-icons">
+                      <div style="position:relative;">
+                        <button class="bottom-icon-btn ${state.settingsOpen ? "active" : ""}" data-settings-toggle title="Settings">${svg("gear")}</button>
+                        ${state.settingsOpen ? `
+                        <div class="popover" data-settings-popover>
+                          <div class="popover-title">Game Settings</div>
+                          <div class="popover-row"><span>Instant play</span><button class="switch ${state.settings.instantPlay ? "on" : ""}" data-toggle-setting="instantPlay"></button></div>
+                          <div class="popover-row"><span>Max bet only</span><button class="switch ${state.settings.maxBet ? "on" : ""}" data-toggle-setting="maxBet"></button></div>
+                          <div class="popover-row"><span>Animations</span><button class="switch ${state.settings.animations ? "on" : ""}" data-toggle-setting="animations" ${Shell.isAnimationsDisabled() ? "disabled" : ""}></button></div>
+                          <div class="volume-row"><span>Volume — ${state.settings.volume}%</span><input type="range" min="0" max="100" value="${state.settings.volume}" data-volume-slider></div>
+                        </div>` : ""}
+                      </div>
+                      <div style="position:relative;">
+                        <button class="bottom-icon-btn ${state.statsOpen ? "active" : ""}" data-stats-toggle title="Live stats">${svg("activity")}</button>
+                      </div>
+                      <button class="bottom-icon-btn ${state.favorite ? "fav-on" : ""}" data-fav-toggle title="Favorite">${svg("heart")}</button>
+                    </div>
+                    <div class="bottom-logo">Neon Jackpot</div>
+                  </footer>
+
+                </div>
+              </div>
+            </div>
+
+            ${state.statsOpen ? `
+            <div class="stats-panel" data-stats-popover style="left:${state.statsPos ? state.statsPos.left : 40}px; top:${state.statsPos ? state.statsPos.top : 40}px;">
+              <div class="stats-head" data-stats-drag-handle>
+                <span>LIVE STATS</span>
+                <div class="stats-head-actions">
+                  <button class="stats-reset hover-tip" data-hover-tip="Reset graph" data-stats-reset>${svg("rotate")}</button>
+                  <button class="stats-close" data-stats-close>${svg("x")}</button>
+                </div>
+              </div>
+              <div class="stats-game-dropdown">
+                <button class="stats-game-toggle" data-stats-game-toggle>${statsCurrentLabel}${svg("chevronDown")}</button>
+                ${state.statsGameDropdownOpen ? `
+                <div class="stats-game-menu">
+                  <button class="${state.statsGame === "all" ? "active" : ""}" data-stats-game="all">All</button>
+                  ${statsPlayedGames.map((g) => `<button class="${state.statsGame === g ? "active" : ""}" data-stats-game="${g}">${gameNames[g] || g}</button>`).join("")}
+                </div>` : ""}
+              </div>
+              <div class="stats-profit ${rangeIsPositive ? "positive" : "negative"}">${rangeIsPositive ? "+$" : "-$"}${Math.abs(rangeProfit).toFixed(2)}</div>
+              <div class="stats-grid">
+                <div><span>Wagered</span><strong>$${rangeWagered.toFixed(2)}</strong></div>
+                <div><span>Wins</span><strong class="positive">${rangeWins}</strong></div>
+                <div><span>Losses</span><strong class="negative">${rangeLosses}</strong></div>
+              </div>
+              <div class="stats-chart-box" data-stats-chart-box>${chart.html}</div>
+            </div>` : ""}
+
+            ${state.infoOpen ? `
+            <div class="modal-overlay" data-info-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>How Limbo works</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Pick a target multiplier — or its matching win chance — then place a bet. A round number is generated, and if it clears your target multiplier, you win your bet back multiplied by that target.</p>
+                <p>Limbo runs at a 99% RTP. Lower target multipliers land more often but pay less; higher targets are rarer and pay far more, up to a maximum of ${MAX_MULTIPLIER.toLocaleString()}x with roughly a ${MIN_CHANCE.toFixed(5)}% chance of hitting it.</p>
+                <div class="modal-stats">
+                  <div><span>RTP</span><strong>${(RTP * 100).toFixed(0)}%</strong></div>
+                  <div><span>Min multiplier</span><strong>${MIN_MULTIPLIER.toFixed(2)}x</strong></div>
+                  <div><span>Max multiplier</span><strong>${MAX_MULTIPLIER.toLocaleString()}x</strong></div>
+                  <div><span>Min chance</span><strong>${MIN_CHANCE.toFixed(5)}%</strong></div>
+                </div>
+              </div>
+            </div>` : ""}
+
+            ${state.fairPlayOpen ? `
+            <div class="modal-overlay" data-fairplay-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>Fair Play</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Your client seed is combined with a server seed to produce every round's result. Change it any time — it's yours to set.</p>
+                <div class="field-label">Client seed</div>
+                <div class="seed-row">
+                  <input type="text" value="${state.clientSeed}" data-client-seed>
+                  <button class="seed-randomize ${state.seedSpinning ? "spin" : ""}" data-randomize-seed>${svg("rotate")} Randomize</button>
+                </div>
+                <div class="seed-note">Randomizing generates a new demo seed — it doesn't change any odds or results.</div>
+              </div>
+            </div>` : ""}
+          `;
+          bind();
+          if (state.statsOpen && window.__limboLastChart) Shell.bindChartHover("[data-stats-chart-box]", window.__limboLastChart);
+        }
+
+        // ---------- roll animation (count-up + water fill on every bet, translucent, full opacity only on a win) ----------
+        function animateRoll(displayMultiplier, targetMultiplier, win, onDone) {
+          state.rolling = true;
+          state.armed = false;
+          state.result = null;
+          state.fill = 0;
+          render();
+
+          const valueEl = document.querySelector("[data-multivalue]");
+          const boxEl = document.querySelector("[data-multibox]");
+          const fillEl = document.querySelector("[data-waterfill]");
+
+          const animate = state.settings.animations;
+          const duration = animate ? (state.settings.instantPlay ? 320 : 850) : 0;
+          const tickInterval = state.settings.instantPlay ? 40 : 55;
+
+          let current = 1.0;
+          let tickTimer = null;
+
+          // Water fill tracks progress toward the TARGET you set (so it always runs, win or lose),
+          // and only reaches 100% / full solid color when the roll actually reaches that target.
+          const updateFill = () => {
+            if (!fillEl) return;
+            const pct = clamp((current / targetMultiplier) * 100, 0, 100);
+            fillEl.style.height = pct + "%";
+          };
+
+          if (animate && duration > 0) {
+            const steps = Math.max(6, Math.round(duration / tickInterval));
+            let step = 0;
+            tickTimer = setInterval(() => {
+              step += 1;
+              const progress = step / steps;
+              const eased = 1 - Math.pow(1 - progress, 2);
+              current = 1 + (displayMultiplier - 1) * eased;
+              if (valueEl) valueEl.textContent = `${current.toFixed(2)}x`;
+              updateFill();
+              playShuffleTick();
+              if (step >= steps) {
+                clearInterval(tickTimer);
+                finish();
+              }
+            }, tickInterval);
+          } else {
+            current = displayMultiplier;
+            finish();
+          }
+
+          function finish() {
+            if (valueEl) {
+              valueEl.textContent = `${displayMultiplier.toFixed(2)}x`;
+              valueEl.classList.add(win ? "win" : "lose");
+            }
+            if (win) {
+              playDing();
+              if (fillEl) fillEl.style.height = "100%";
+              if (boxEl) boxEl.classList.add("win-fill");
+              state.fill = 100;
+            } else {
+              // stays wherever the crash point landed relative to the target — translucent, never full
+              state.fill = clamp((current / targetMultiplier) * 100, 0, 100);
+            }
+            state.rolling = false;
+            state.result = { multiplier: displayMultiplier, target: targetMultiplier, win };
+            state.recent.push({ value: displayMultiplier, win });
+            if (state.recent.length > 20) state.recent.shift();
+            render();
+            if (onDone) onDone();
+          }
+        }
+
+        function rollOutcome(multiplierTarget) {
+          // Standard provably-fair crash distribution: P(crash >= target) = RTP / target,
+          // which matches the site's existing win-chance math exactly.
+          const r = Math.random();
+          let crashMultiplier = RTP / Math.max(1e-9, 1 - r);
+          crashMultiplier = clamp(crashMultiplier, 1, MAX_MULTIPLIER * 10); // let it visually run past MAX_MULTIPLIER a bit before clamping
+          const won = crashMultiplier >= multiplierTarget;
+          // The number that actually climbs on screen is the real crash point (can overshoot the
+          // target you set — that's just visual). The payout always uses your target, never the crash value.
+          const displayMultiplier = clamp(crashMultiplier, 1, MAX_MULTIPLIER);
+          return { won, displayMultiplier };
+        }
+
+        // ---------- place bet (manual) ----------
+        function placeBet() {
+          if (state.rolling) return; // block placing a new bet until the current one finishes
+          const multiplierTarget = parseFloat(state.multiplier);
+          if (!multiplierTarget || multiplierTarget < MIN_MULTIPLIER) return;
+
+          const betRaw = parseFloat(state.betAmount);
+          let betAmount = state.betAmount !== "" && !isNaN(betRaw) && betRaw > 0 ? betRaw : 0;
+          const balance = Shell.getBalance();
+          if (betAmount > 0 && (balance <= 0 || betAmount > balance)) { render(); return; } // insufficient balance — never bet more than you have
+          if (betAmount > 0 && Shell.isBelowMinBet(betAmount)) { render(); return; } // never let a real bet fall under the site minimum
+          betAmount = Math.min(betAmount, balance); // never let a bet exceed the current balance
+
+          state.rolling = true; // lock betting immediately so a second click can't queue up before animateRoll takes over
+          playClick();
+          state.armed = true;
+          render();
+
+          setTimeout(() => {
+            const { won, displayMultiplier } = rollOutcome(multiplierTarget);
+            applyResult(betAmount, multiplierTarget, won, displayMultiplier);
+            animateRoll(displayMultiplier, multiplierTarget, won);
+          }, 260);
+        }
+
+        // balance now lives in Shell (shared across the whole site via localStorage)
+        function applyResult(betAmount, multiplierTarget, won, hitMultiplier) {
+          state.wagered += betAmount;
+          const prevProfit = state.history.length ? state.history[state.history.length - 1] : 0;
+          let profitDelta = 0;
+          if (won) {
+            const payout = betAmount * multiplierTarget;
+            profitDelta = betAmount === 0 ? 0 : payout - betAmount;
+            state.wins += 1;
+          } else {
+            profitDelta = betAmount === 0 ? 0 : -betAmount;
+            state.losses += 1;
+          }
+          if (profitDelta < 0) profitDelta = Math.max(profitDelta, -Shell.getBalance()); // never drive the balance below zero
+          if (profitDelta !== 0) Shell.addBalance(profitDelta);
+          const cumulative = prevProfit + profitDelta;
+          state.history.push(cumulative);
+          if (state.history.length > 30) state.history.shift();
+          Shell.addBetEntry({
+            profit: profitDelta, bet: betAmount, won, game: "limbo",
+            detail: { type: "path", multiplier: hitMultiplier != null ? hitMultiplier : multiplierTarget, label: `Target ${multiplierTarget.toFixed(2)}x` },
+          });
+          return profitDelta;
+        }
+
+        // ---------- auto mode ----------
+        function startAuto() {
+          const multiplierTarget = parseFloat(state.multiplier);
+          if (!multiplierTarget || multiplierTarget < MIN_MULTIPLIER) return;
+          const auto = state.auto;
+          const betRaw = parseFloat(state.betAmount);
+          const requestedBet = state.betAmount !== "" && !isNaN(betRaw) && betRaw > 0 ? betRaw : 0;
+          const balance = Shell.getBalance();
+          if (requestedBet > 0 && (balance <= 0 || requestedBet > balance)) { render(); return; } // insufficient balance — refuse to start
+          if (requestedBet > 0 && Shell.isBelowMinBet(requestedBet)) { render(); return; } // never start an auto sequence under the site minimum
+          const num = parseInt(auto.numBets, 10);
+          auto.betsRemaining = auto.numBets.trim() !== "" && !isNaN(num) && num > 0 ? num : null;
+          auto.running = true;
+          auto.currentProfit = 0;
+          auto.lastGameProfit = 0;
+          auto.baseBet = requestedBet;
+          render();
+          runAutoStep();
+        }
+
+        function stopAuto() {
+          state.auto.running = false;
+          render();
+        }
+
+        function runAutoStep() {
+          const auto = state.auto;
+          if (!auto.running) return;
+          if (auto.betsRemaining !== null && auto.betsRemaining <= 0) { stopAuto(); return; }
+
+          const multiplierTarget = parseFloat(state.multiplier);
+          const betRaw = parseFloat(state.betAmount);
+          let betAmount = state.betAmount !== "" && !isNaN(betRaw) && betRaw > 0 ? betRaw : 0;
+          const balance = Shell.getBalance();
+          if (betAmount > 0 && (balance <= 0 || betAmount > balance)) { stopAuto(); return; } // insufficient balance — stop the sequence
+          betAmount = Math.min(betAmount, balance); // never let a bet exceed the current balance
+
+          playClick();
+          state.armed = true;
+          render();
+
+          setTimeout(() => {
+            const { won, displayMultiplier } = rollOutcome(multiplierTarget);
+            const profitDelta = applyResult(betAmount, multiplierTarget, won, displayMultiplier);
+            auto.currentProfit += profitDelta;
+            auto.lastGameProfit = profitDelta;
+
+            if (won && auto.onWinAction === "increase") {
+              const pct = parseFloat(auto.onWinPct) || 0;
+              const next = betAmount * (1 + pct / 100);
+              state.betAmount = next > 0 ? next.toFixed(2) : state.betAmount;
+            } else if (!won && auto.onLossAction === "increase") {
+              const pct = parseFloat(auto.onLossPct) || 0;
+              const next = betAmount * (1 + pct / 100);
+              state.betAmount = next > 0 ? next.toFixed(2) : state.betAmount;
+            } else if ((won && auto.onWinAction === "reset") || (!won && auto.onLossAction === "reset")) {
+              if (auto.baseBet !== null) state.betAmount = auto.baseBet > 0 ? auto.baseBet.toFixed(2) : state.betAmount;
+            }
+
+            if (auto.betsRemaining !== null) auto.betsRemaining -= 1;
+
+            animateRoll(displayMultiplier, multiplierTarget, won, () => {
+              const stopProfit = parseFloat(auto.stopOnProfit);
+              const stopLoss = parseFloat(auto.stopOnLoss);
+              let shouldStop = false;
+              if (!isNaN(stopProfit) && stopProfit > 0 && auto.currentProfit >= stopProfit) shouldStop = true;
+              if (!isNaN(stopLoss) && stopLoss > 0 && auto.currentProfit <= -stopLoss) shouldStop = true;
+              if (auto.betsRemaining !== null && auto.betsRemaining <= 0) shouldStop = true;
+
+              if (shouldStop || !auto.running) { stopAuto(); return; }
+              setTimeout(runAutoStep, 400);
+            });
+          }, 260);
+        }
+
+        // ---------- input sync (multiplier <-> chance) ----------
+        function onMultiplierInput(raw) {
+          state.multiplier = raw;
+          state.tooltip.multiplier = raw.trim() === "";
+          const n = parseFloat(raw);
+          if (raw.trim() !== "" && !isNaN(n)) {
+            const clamped = clamp(n, MIN_MULTIPLIER, MAX_MULTIPLIER);
+            state.chance = fmtChance(chanceForMultiplier(clamped));
+            state.tooltip.chance = false;
+          } else {
+            state.chance = "";
+          }
+          render();
+          refocus("[data-multiplier-input]");
+        }
+
+        function onChanceInput(raw) {
+          state.chance = raw;
+          state.tooltip.chance = raw.trim() === "";
+          const n = parseFloat(raw);
+          if (raw.trim() !== "" && !isNaN(n)) {
+            const clamped = clamp(n, MIN_CHANCE, 100);
+            state.multiplier = fmtMulti(multiplierForChance(clamped));
+            state.tooltip.multiplier = false;
+          } else {
+            state.multiplier = "";
+          }
+          render();
+          refocus("[data-chance-input]");
+        }
+
+        function refocus(selector) {
+          requestAnimationFrame(() => {
+            const el = document.querySelector(selector);
+            if (el) { el.focus(); const v = el.value; el.setSelectionRange(v.length, v.length); }
+          });
+        }
+
+        // ---------- bind ----------
+        function bind() {
+          document.querySelectorAll("[data-mode]").forEach((btn) => btn.onclick = () => { if (btn.disabled) return; state.mode = btn.dataset.mode; render(); });
+
+          const betInput = document.querySelector("[data-bet-input]");
+          betInput?.addEventListener("input", (e) => { state.betAmount = e.target.value.replace(/[^0-9.]/g, ""); render(); refocus("[data-bet-input]"); });
+
+          document.querySelector("[data-half]")?.addEventListener("click", () => { const b = parseFloat(state.betAmount) || 0; state.betAmount = (b / 2).toFixed(2); render(); });
+          document.querySelector("[data-double]")?.addEventListener("click", () => {
+            const b = parseFloat(state.betAmount) || 0;
+            const doubled = b * 2 || 0;
+            const capped = Math.min(doubled, Shell.getBalance());
+            state.betAmount = capped.toFixed(2);
+            render();
+          });
+
+          document.querySelector("[data-place]")?.addEventListener("click", placeBet);
+
+          document.querySelector("[data-num-bets]")?.addEventListener("input", (e) => { state.auto.numBets = e.target.value.replace(/[^0-9]/g, ""); render(); refocus("[data-num-bets]"); });
+          document.querySelector("[data-win-action]")?.addEventListener("click", () => { state.auto.onWinAction = state.auto.onWinAction === "reset" ? "increase" : "reset"; render(); });
+          document.querySelector("[data-loss-action]")?.addEventListener("click", () => { state.auto.onLossAction = state.auto.onLossAction === "reset" ? "increase" : "reset"; render(); });
+          document.querySelector("[data-win-pct]")?.addEventListener("input", (e) => { state.auto.onWinPct = e.target.value.replace(/[^0-9.]/g, ""); render(); refocus("[data-win-pct]"); });
+          document.querySelector("[data-loss-pct]")?.addEventListener("input", (e) => { state.auto.onLossPct = e.target.value.replace(/[^0-9.]/g, ""); render(); refocus("[data-loss-pct]"); });
+          document.querySelector("[data-stop-profit]")?.addEventListener("input", (e) => { state.auto.stopOnProfit = e.target.value.replace(/[^0-9.]/g, ""); render(); refocus("[data-stop-profit]"); });
+          document.querySelector("[data-stop-loss]")?.addEventListener("input", (e) => { state.auto.stopOnLoss = e.target.value.replace(/[^0-9.]/g, ""); render(); refocus("[data-stop-loss]"); });
+          document.querySelector("[data-auto-toggle]")?.addEventListener("click", () => { if (state.auto.running) stopAuto(); else startAuto(); });
+
+          const multiplierInput = document.querySelector("[data-multiplier-input]");
+          multiplierInput?.addEventListener("input", (e) => onMultiplierInput(e.target.value));
+          multiplierInput?.addEventListener("blur", () => {
+            const n = parseFloat(state.multiplier);
+            if (state.multiplier !== "" && !isNaN(n)) { state.multiplier = fmtMulti(clamp(n, MIN_MULTIPLIER, MAX_MULTIPLIER)); state.chance = fmtChance(chanceForMultiplier(parseFloat(state.multiplier))); render(); }
+          });
+          document.querySelector("[data-clear-multiplier]")?.addEventListener("click", () => { onMultiplierInput(""); });
+
+          const chanceInput = document.querySelector("[data-chance-input]");
+          chanceInput?.addEventListener("input", (e) => onChanceInput(e.target.value));
+          chanceInput?.addEventListener("blur", () => {
+            const n = parseFloat(state.chance);
+            if (state.chance !== "" && !isNaN(n)) { state.chance = fmtChance(clamp(n, MIN_CHANCE, 100)); state.multiplier = fmtMulti(multiplierForChance(parseFloat(state.chance))); render(); }
+          });
+
+          document.querySelector("[data-fair-play]")?.addEventListener("click", () => { state.fairPlayOpen = true; render(); });
+          document.querySelector("[data-info]")?.addEventListener("click", () => { state.infoOpen = true; render(); });
+          document.querySelectorAll("[data-modal-close]").forEach((btn) => btn.onclick = () => { state.infoOpen = false; state.fairPlayOpen = false; render(); });
+          document.querySelector("[data-info-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.infoOpen = false; render(); } });
+          document.querySelector("[data-fairplay-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.fairPlayOpen = false; render(); } });
+          document.querySelector("[data-client-seed]")?.addEventListener("input", (e) => { state.clientSeed = e.target.value; });
+          document.querySelector("[data-randomize-seed]")?.addEventListener("click", (e) => {
+            const chars = "abcdef0123456789";
+            const gen = () => Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+            state.clientSeed = `${gen()}-${gen()}-${gen()}-${gen()}`;
+            const btn = e.currentTarget;
+            btn.classList.add("spin");
+            setTimeout(() => btn.classList.remove("spin"), 500);
+            render();
+            Shell.notify("New seed generated. This is just for show — nothing else changes.");
+          });
+
+          document.querySelector("[data-settings-toggle]")?.addEventListener("click", (e) => { e.stopPropagation(); state.settingsOpen = !state.settingsOpen; render(); });
+          document.querySelectorAll("[data-toggle-setting]").forEach((btn) => btn.onclick = (e) => { e.stopPropagation(); const key = btn.dataset.toggleSetting; state.settings[key] = !state.settings[key]; render(); });
+          document.querySelector("[data-volume-slider]")?.addEventListener("input", (e) => { state.settings.volume = parseInt(e.target.value, 10); render(); });
+
+          document.querySelector("[data-stats-toggle]")?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (!state.statsOpen) {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const panelWidth = 460;
+              let left = rect.left;
+              if (left + panelWidth > window.innerWidth - 16) left = window.innerWidth - panelWidth - 16;
+              state.statsPos = { left: Math.max(16, left), top: rect.top - 8 - 360 };
+              if (state.statsPos.top < 16) state.statsPos.top = rect.bottom + 8;
+            }
+            state.statsOpen = !state.statsOpen;
+            render();
+          });
+          document.querySelector("[data-stats-close]")?.addEventListener("click", (e) => { e.stopPropagation(); state.statsOpen = false; render(); });
+          document.querySelector("[data-stats-reset]")?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            Shell.resetBetLog();
+            render();
+            Shell.notify("Live stats graph reset.");
+          });
+          document.querySelector("[data-stats-game-toggle]")?.addEventListener("click", (e) => { e.stopPropagation(); state.statsGameDropdownOpen = !state.statsGameDropdownOpen; render(); });
+          document.querySelectorAll("[data-stats-game]").forEach((btn) => btn.onclick = (e) => { e.stopPropagation(); state.statsGame = btn.dataset.statsGame; state.statsGameDropdownOpen = false; render(); });
+
+          const dragHandle = document.querySelector("[data-stats-drag-handle]");
+          if (dragHandle) {
+            dragHandle.addEventListener("mousedown", (e) => {
+              if (e.target.closest("[data-stats-close]")) return;
+              const panel = document.querySelector("[data-stats-popover]");
+              if (!panel) return;
+              const rect = panel.getBoundingClientRect();
+              state.statsDrag = { offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+              panel.classList.add("dragging");
+              e.preventDefault();
+            });
+          }
+
+          document.querySelector("[data-fav-toggle]")?.addEventListener("click", () => {
+            Shell.toggleFavorite("limbo");
+            state.favorite = Shell.getFavorites().includes("limbo");
+            render();
+            Shell.notify(state.favorite ? "Added Limbo to favorites." : "Removed Limbo from favorites.");
+          });
+
+          document.querySelector(".game-shell")?.addEventListener("click", (e) => {
+            if (state.settingsOpen && !e.target.closest("[data-settings-popover]") && !e.target.closest("[data-settings-toggle]")) { state.settingsOpen = false; render(); }
+            if (state.statsGameDropdownOpen && !e.target.closest(".stats-game-dropdown")) { state.statsGameDropdownOpen = false; render(); }
+          });
+        }
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,976 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Neon Jackpot fictional arcade demo — Keno" />
+    <title>Keno · Neon Jackpot</title>
+    <link rel="stylesheet" href="./shell.css" />
+    <link rel="stylesheet" href="./game-frame.css" />
+    <style>
+      .game-box.keno-stage {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 18px;
+        padding: 26px 24px;
+        background: linear-gradient(160deg, #131a2c, #10131f 60%, #171226);
+      }
+
+      /* ---- risk dropdown, sits under Bet Amount ---- */
+      .keno-risk-row { position: relative; }
+      .keno-risk-toggle {
+        display: flex; align-items: center; justify-content: space-between;
+        width: 100%; padding: 12px 14px;
+        color: var(--text); background: #0c0e18; border: 1px solid var(--line); border-radius: 11px;
+        font-size: 13px; font-weight: 700; text-transform: capitalize;
+      }
+      .keno-risk-toggle svg { width: 14px; height: 14px; color: #7c88a0; transition: transform .15s ease; }
+      .keno-risk-toggle.open svg { transform: rotate(180deg); }
+      .keno-risk-menu {
+        position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 12;
+        padding: 4px; background: #171b2c; border: 1px solid var(--line); border-radius: 10px;
+        box-shadow: 0 14px 30px rgba(0,0,0,.4);
+      }
+      .keno-risk-menu button {
+        display: block; width: 100%; padding: 9px 10px; color: #b6bfd2; background: transparent;
+        border: 0; border-radius: 7px; font-size: 12.5px; font-weight: 700; text-align: left; text-transform: capitalize;
+      }
+      .keno-risk-menu button:hover { background: rgba(255,255,255,.06); color: #fff; }
+      .keno-risk-menu button.active { color: #04140f; background: var(--mint); }
+
+      /* ---- autopick / clear buttons ---- */
+      .keno-action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+      .keno-action-btn {
+        padding: 11px 0; color: #cdd4e2; background: #171c2c; border: 1px solid var(--line); border-radius: 10px;
+        font-size: 11.5px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 6px;
+      }
+      .keno-action-btn svg { width: 13px; height: 13px; }
+      .keno-action-btn:hover:not(:disabled) { color: #fff; border-color: rgba(255,255,255,.3); }
+      .keno-action-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+      /* ---- board ---- */
+      .keno-board-wrap { display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%; }
+      .keno-board {
+        display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 9px;
+        width: 100%; max-width: 640px;
+      }
+      .keno-tile {
+        position: relative;
+        aspect-ratio: 1 / 1;
+        display: grid; place-items: center;
+        color: #b6bfd2; background: #1c2136; border: 1px solid var(--line); border-radius: 10px;
+        font-family: var(--mono); font-size: 15px; font-weight: 800;
+        transition: background .15s ease, color .15s ease, transform .1s ease, border-color .15s ease;
+        user-select: none;
+      }
+      .keno-tile:hover:not(:disabled):not(.picked) { background: #262c48; color: #fff; }
+      .keno-tile:active:not(:disabled) { transform: scale(.94); }
+      .keno-tile:disabled { cursor: not-allowed; }
+      .keno-tile.picked {
+        color: #fff; background: linear-gradient(160deg, #8c93ff, #5b62f0);
+        border-color: rgba(140, 147, 255, .7);
+        box-shadow: 0 4px 14px rgba(92, 98, 240, .35);
+      }
+      /* revealed after a bet resolves */
+      .keno-tile.hit {
+        color: #04140f; background: linear-gradient(160deg, #7dffe9, #2fd9bd);
+        border-color: rgba(92,255,231,.7);
+        box-shadow: 0 0 0 3px rgba(92,255,231,.18), 0 4px 16px rgba(92,255,231,.4);
+      }
+      .keno-tile.hit-pop { animation: keno-pop .32s ease; }
+      .keno-tile.miss {
+        color: #ff9fae; background: #1c1826; border-color: rgba(255,110,143,.35);
+      }
+      .keno-tile.miss.picked { color: #ffd7de; }
+      @keyframes keno-pop { 0% { transform: scale(.55); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
+
+      /* ---- result overlay: dims the board and shows the outcome ---- */
+      .keno-result-overlay {
+        position: absolute; inset: 0; z-index: 5;
+        display: grid; place-items: center;
+        background: rgba(8, 9, 16, .62);
+        backdrop-filter: blur(1.5px);
+        border-radius: inherit;
+        animation: keno-overlay-in .18s ease;
+        cursor: pointer;
+      }
+      @keyframes keno-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+      .keno-result-card {
+        display: flex; flex-direction: column; align-items: center; gap: 6px;
+        padding: 22px 34px; background: #171c2c; border: 1px solid var(--line); border-radius: 16px;
+        box-shadow: 0 20px 50px rgba(0,0,0,.45);
+        cursor: default;
+      }
+      .keno-result-card.win { border-color: rgba(92,255,231,.5); }
+      .keno-result-card.lose { border-color: rgba(255,110,143,.35); }
+      .keno-result-mult { font-family: var(--mono); font-size: 26px; font-weight: 800; color: var(--mint); }
+      .keno-result-card.lose .keno-result-mult { color: #ff9fae; }
+      .keno-result-amt { font-family: var(--mono); font-size: 13px; font-weight: 700; }
+      .keno-result-amt.win { color: var(--mint); }
+      .keno-result-amt.lose { color: #ff9fae; }
+      .keno-result-demo { color: #6d7891; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+
+      /* ---- multiplier ladder ---- */
+      .keno-mult-ladder {
+        display: grid; gap: 6px; width: 100%; max-width: 640px;
+        grid-template-columns: repeat(var(--keno-cols, 1), minmax(0, 1fr));
+      }
+      .keno-mult-box {
+        display: flex; flex-direction: column; align-items: center; gap: 3px;
+        padding: 9px 4px; background: #171c2c; border: 1px solid var(--line); border-radius: 9px;
+        font-family: var(--mono);
+      }
+      .keno-mult-box strong { font-size: 11.5px; color: #dbe1ec; }
+      .keno-mult-box span { display: flex; align-items: center; gap: 3px; color: #6d7891; font-size: 9.5px; }
+      .keno-mult-box span svg { width: 9px; height: 9px; color: var(--mint); }
+      .keno-mult-box.hit { border-color: rgba(92,255,231,.6); background: rgba(92,255,231,.08); }
+      .keno-mult-box.hit strong { color: var(--mint); }
+      .keno-mult-box.zero strong { color: #6d7891; }
+
+      /* ---- hover tooltip: payout + chance, shown above the hovered box ---- */
+      .keno-mult-box { position: relative; cursor: default; }
+      .keno-mult-tip {
+        position: absolute; left: 50%; bottom: calc(100% + 10px); z-index: 20;
+        transform: translateX(-50%) translateY(4px);
+        min-width: 150px; padding: 10px 12px;
+        background: #171c2c; border: 1px solid var(--line); border-radius: 10px;
+        box-shadow: 0 14px 30px rgba(0,0,0,.4);
+        opacity: 0; pointer-events: none;
+        transition: opacity .12s ease, transform .12s ease;
+      }
+      .keno-mult-tip::after {
+        content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+        border: 6px solid transparent; border-top-color: #171c2c;
+      }
+      .keno-mult-box:hover .keno-mult-tip { opacity: 1; transform: translateX(-50%) translateY(0); }
+      .keno-mult-box:first-child .keno-mult-tip { left: 0; transform: translateX(0) translateY(4px); }
+      .keno-mult-box:first-child:hover .keno-mult-tip { transform: translateX(0) translateY(0); }
+      .keno-mult-box:first-child .keno-mult-tip::after { left: 16px; transform: none; }
+      .keno-mult-box:last-child .keno-mult-tip { left: auto; right: 0; transform: translateX(0) translateY(4px); }
+      .keno-mult-box:last-child:hover .keno-mult-tip { transform: translateX(0) translateY(0); }
+      .keno-mult-box:last-child .keno-mult-tip::after { left: auto; right: 16px; transform: none; }
+      .keno-mult-tip-row { display: flex; gap: 18px; }
+      .keno-mult-tip-row + .keno-mult-tip-row { margin-top: 4px; }
+      .keno-mult-tip-row span { flex: 1; color: #7c88a0; font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .03em; }
+      .keno-mult-tip-row.vals strong { flex: 1; color: #dbe1ec; font-family: var(--mono); font-size: 12.5px; font-weight: 800; }
+
+      .keno-hint {
+        width: 100%; max-width: 640px; box-sizing: border-box;
+        color: #9aa4bc; font-size: 13px; font-weight: 600; text-align: center;
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+        padding: 16px 14px; background: #171c2c; border: 1px solid var(--line); border-radius: 10px;
+      }
+      .keno-hint svg { width: 15px; height: 15px; color: #7c88a0; }
+
+      @media (max-width: 700px) {
+        .keno-board { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+        .keno-tile { font-size: 12.5px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="site-shell">
+      <div class="site-grid">
+        <div id="site-sidebar"></div>
+        <div id="site-topbar"></div>
+        <div id="page-content"></div>
+      </div>
+    </div>
+    <script src="./promo-vault.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="./chat.js"></script>
+    <script src="./shell.js"></script>
+    <script src="./games.js"></script>
+    <script>
+      (() => {
+        // ---------------------------------------------------------------
+        // 1) IDENTITY
+        // ---------------------------------------------------------------
+        const GAME_NAME = "Keno";
+        const GAME_ID   = "keno";
+        const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+        Shell.mount({ activeTab: "Games" });
+        Chat.mount();
+        document.addEventListener("nj:animations", (e) => { state.settings.animations = !e.detail; render(); });
+        const content = document.getElementById("page-content");
+        const svg = Shell.svg;
+
+        // ---------------------------------------------------------------
+        // 2) PAYTABLE — [picks][matches] -> multiplier. Index 0 in every
+        //    row is 0 matches (always a loss). Every risk tier is capped
+        //    at 1000x, per spec. Board is 40 numbers, 10 are drawn.
+        // ---------------------------------------------------------------
+        const PAYTABLES = {
+          low: {
+            1:  [0.7, 1.85],
+            2:  [0, 2, 3.8],
+            3:  [0, 1.1, 1.38, 26],
+            4:  [0, 0, 2.2, 7.9, 90],
+            5:  [0, 0, 1.5, 4.2, 13, 300],
+            6:  [0, 0, 1.1, 2, 6.2, 100, 700],
+            7:  [0, 0, 1.1, 1.6, 3.5, 15, 225, 700],
+            8:  [0, 0, 1.1, 1.5, 2, 5.5, 39, 100, 800],
+            9:  [0, 0, 1.1, 1.3, 1.7, 2.5, 7.5, 50, 250, 1000],
+            10: [0, 0, 1.1, 1.2, 1.3, 1.8, 3.5, 13, 50, 250, 1000],
+          },
+          medium: {
+            1:  [0.4, 2.75],
+            2:  [0, 1.8, 5.1],
+            3:  [0, 0, 2.8, 50],
+            4:  [0, 0, 1.7, 10, 100],
+            5:  [0, 0, 1.4, 4, 14, 390],
+            6:  [0, 0, 0, 3, 9, 180, 710],
+            7:  [0, 0, 0, 2, 7, 30, 400, 800],
+            8:  [0, 0, 0, 2, 4, 11, 67, 400, 900],
+            9:  [0, 0, 0, 2, 2.5, 5, 15, 100, 500, 1000],
+            10: [0, 0, 0, 1.6, 2, 4, 7, 26, 100, 500, 1000],
+          },
+          high: {
+            1:  [0, 3.96],
+            2:  [0, 0, 17.1],
+            3:  [0, 0, 0, 81.5],
+            4:  [0, 0, 0, 10, 259],
+            5:  [0, 0, 0, 4.5, 48, 450],
+            6:  [0, 0, 0, 0, 11, 350, 710],
+            7:  [0, 0, 0, 0, 7, 90, 400, 800],
+            8:  [0, 0, 0, 0, 5, 20, 270, 600, 900],
+            9:  [0, 0, 0, 0, 4, 11, 56, 500, 800, 1000],
+            10: [0, 0, 0, 0, 3.5, 8, 13, 63, 500, 800, 1000],
+          },
+        };
+        const BOARD_SIZE = 40;
+        const DRAWN_COUNT = 10;
+        const MAX_PICKS = 10;
+        const MIN_PICKS = 1;
+
+        // ---------------------------------------------------------------
+        // 3) STATE
+        // ---------------------------------------------------------------
+        const state = {
+          mode: "manual",        // "manual" | "auto"
+          betAmount: "",
+          risk: "medium",        // "low" | "medium" | "high"
+          riskOpen: false,
+          picks: [],              // selected tile numbers (1..40), max 10
+          busy: false,
+          lastResult: null,       // { won, profit, payoutLabel, drawn:[], hits:[], mult } or null
+          showResultOverlay: false, // whether the dimmed result card over the board is visible
+          infoOpen: false,
+          fairPlayOpen: false,
+          settingsOpen: false,
+          statsOpen: false,
+          favorite: Shell.getFavorites().includes(GAME_ID),
+          settings: { animations: !Shell.isAnimationsDisabled(), volume: 100 },
+
+          statsGame: "all",
+          statsGameDropdownOpen: false,
+          statsDrag: null,
+          statsPos: null,
+
+          clientSeed: `${randHex()}-${randHex()}-${randHex()}-${randHex()}`,
+          seedSpinning: false,
+
+          autoPicking: false,     // true while the auto-pick animation is stepping through tiles
+          revealing: null,        // { drawn, drawnSet, picks, revealedDrawn, justRevealed } while the draw animation plays
+
+          auto: {
+            running: false,
+            numBets: "",
+            betsRemaining: null,
+            onWinPct: "",
+            onLossPct: "",
+            stopOnProfit: "",
+            stopOnLoss: "",
+            currentProfit: 0,
+            lastGameProfit: 0,
+            baseBet: null,
+          },
+        };
+
+        function randHex() { return Math.floor(Math.random() * 0xffff).toString(16).padStart(4, "0"); }
+
+        // ---------------------------------------------------------------
+        // Odds helpers
+        // ---------------------------------------------------------------
+        function paytableFor(picksCount) {
+          const table = PAYTABLES[state.risk] || PAYTABLES.medium;
+          return table[picksCount] || null;
+        }
+        function multiplierFor(picksCount, matches) {
+          const row = paytableFor(picksCount);
+          if (!row) return 0;
+          return row[matches] || 0;
+        }
+
+        // nCr, used to compute the real odds of hitting exactly `matches` out
+        // of `picksCount` picks on a 40-number board with 10 drawn (the same
+        // hypergeometric math real keno uses) — shown in the hover tooltip.
+        function nCr(n, r) {
+          if (r < 0 || r > n) return 0;
+          r = Math.min(r, n - r);
+          let result = 1;
+          for (let i = 0; i < r; i++) result = (result * (n - i)) / (i + 1);
+          return result;
+        }
+        function chanceFor(picksCount, matches) {
+          if (matches > picksCount || matches > DRAWN_COUNT) return 0;
+          const denom = nCr(BOARD_SIZE, picksCount);
+          if (denom === 0) return 0;
+          return (nCr(DRAWN_COUNT, matches) * nCr(BOARD_SIZE - DRAWN_COUNT, picksCount - matches)) / denom;
+        }
+        function fmtChance(p) {
+          const pct = p * 100;
+          if (pct === 0) return "0%";
+          if (pct >= 1) return pct.toFixed(2) + "%";
+          if (pct >= 0.01) return pct.toFixed(4) + "%";
+          // very small odds (deep paytable rows) — keep meaningful digits
+          return pct.toFixed(Math.min(12, Math.max(2, 2 - Math.floor(Math.log10(pct))))) + "%";
+        }
+
+        // ---------------------------------------------------------------
+        // 4) ROUND LOGIC
+        // ---------------------------------------------------------------
+        function drawNumbers() {
+          const pool = Array.from({ length: BOARD_SIZE }, (_, i) => i + 1);
+          const drawn = [];
+          for (let i = 0; i < DRAWN_COUNT; i++) {
+            const idx = Math.floor(Math.random() * pool.length);
+            drawn.push(pool.splice(idx, 1)[0]);
+          }
+          return drawn;
+        }
+
+        function playRound(betAmount, picks, predrawn) {
+          const drawn = predrawn || drawNumbers();
+          const drawnSet = new Set(drawn);
+          const hits = picks.filter((n) => drawnSet.has(n));
+          const mult = multiplierFor(picks.length, hits.length);
+          const won = mult > 0;
+          const profit = betAmount === 0 ? 0 : (won ? betAmount * (mult - 1) : -betAmount);
+          return {
+            won, profit, mult, betAmount,
+            payoutLabel: won ? `${mult.toFixed(2)}x` : "0.00x",
+            drawn, hits, picks,
+          };
+        }
+
+        function recordBet(betAmount, result) {
+          Shell.addBetEntry({
+            game: GAME_ID, bet: betAmount, won: result.won, profit: result.profit,
+            detail: { type: "keno", drawn: result.drawn, picks: result.picks, total: 40 },
+          });
+          if (result.profit !== 0) Shell.addBalance(result.profit);
+        }
+
+        function currentBetAmount() {
+          const raw = parseFloat(state.betAmount);
+          return state.betAmount !== "" && !isNaN(raw) && raw > 0 ? raw : 0;
+        }
+
+        // ---------------------------------------------------------------
+        // TILE SELECTION
+        // ---------------------------------------------------------------
+        function toggleTile(n) {
+          if (state.busy || state.auto.running || state.autoPicking) return;
+          const idx = state.picks.indexOf(n);
+          if (idx !== -1) {
+            state.picks.splice(idx, 1);
+          } else {
+            if (state.picks.length >= MAX_PICKS) return;
+            state.picks.push(n);
+          }
+          state.lastResult = null;
+          state.showResultOverlay = false;
+          render();
+        }
+
+        function dismissResultOverlay(e) {
+          // Placing another bet already clears the overlay itself; avoid a
+          // double-render fight by ignoring clicks on the bet buttons here.
+          if (e && e.target.closest("[data-place],[data-auto-toggle]")) return;
+          if (!state.showResultOverlay) return;
+          state.showResultOverlay = false;
+          render();
+        }
+
+        function clearTable() {
+          if (state.busy || state.auto.running || state.autoPicking) return;
+          state.picks = [];
+          state.lastResult = null;
+          state.showResultOverlay = false;
+          render();
+        }
+
+        // Auto-pick fills the board to 10 tiles, one at a time with a short
+        // stagger, so it visibly "picks" rather than snapping instantly.
+        function autoPick() {
+          if (state.busy || state.auto.running || state.autoPicking) return;
+          state.picks = [];
+          state.lastResult = null;
+          state.showResultOverlay = false;
+          state.autoPicking = true;
+          render();
+
+          const pool = Array.from({ length: BOARD_SIZE }, (_, i) => i + 1);
+          const chosen = [];
+          for (let i = 0; i < MAX_PICKS; i++) {
+            const idx = Math.floor(Math.random() * pool.length);
+            chosen.push(pool.splice(idx, 1)[0]);
+          }
+
+          if (!state.settings.animations) {
+            state.picks = chosen.slice();
+            state.autoPicking = false;
+            render();
+            return;
+          }
+
+          let step = 0;
+          function tick() {
+            state.picks.push(chosen[step]);
+            step++;
+            render();
+            if (step < chosen.length) {
+              setTimeout(tick, 55);
+            } else {
+              state.autoPicking = false;
+              render();
+            }
+          }
+          setTimeout(tick, 55);
+        }
+
+        // ---------------------------------------------------------------
+        // TILE REVEAL ANIMATION — steps through the player's picked tiles
+        // one at a time (~2.5s total for 10 picks), playing a click sound
+        // for a miss and a ding for a hit as each one resolves. The draw
+        // itself already happened before this runs, so the outcome is fixed;
+        // this only controls how it's revealed.
+        // ---------------------------------------------------------------
+        function runTileRevealSequence(picks, onDone) {
+          const drawn = drawNumbers();
+          const drawnSet = new Set(drawn);
+          // The 10 DRAWN numbers are what animate onto the board one at a
+          // time (that's the actual keno draw happening) — each one lands as
+          // a hit (green) if the player picked it, or a miss (plain) if not.
+          // Player picks that never get drawn simply stay in their normal
+          // "picked" state the whole time, since they were never called.
+          state.revealing = { drawn, drawnSet, picks, revealedDrawn: new Set(), justRevealed: null };
+
+          if (!state.settings.animations) {
+            // Animations off: reveal everything at once, no stepping/delays.
+            for (const n of drawn) state.revealing.revealedDrawn.add(n);
+            const anyHit = drawn.some((n) => picks.includes(n));
+            if (anyHit) Shell.playWinDing(state.settings.volume);
+            state.revealing = null;
+            render();
+            onDone(drawn);
+            return;
+          }
+
+          render();
+
+          const total = Math.max(drawn.length, 1);
+          const stepMs = 1250 / total;
+          let i = 0;
+
+          function step() {
+            if (i >= drawn.length) {
+              state.revealing = null;
+              onDone(drawn);
+              return;
+            }
+            const n = drawn[i];
+            const isHit = picks.includes(n);
+            state.revealing.revealedDrawn.add(n);
+            state.revealing.justRevealed = n;
+            if (isHit) {
+              Shell.playWinDing(state.settings.volume);
+            } else {
+              Shell.playChipSound("select", state.settings.volume);
+            }
+            i++;
+            render();
+            setTimeout(step, stepMs);
+          }
+          setTimeout(step, stepMs);
+        }
+
+        // ---------------------------------------------------------------
+        // PLACE BET (manual)
+        // ---------------------------------------------------------------
+        function placeBet() {
+          if (state.busy || state.autoPicking) return;
+          if (state.picks.length < MIN_PICKS) { Shell.notify("Select at least 1 number."); return; }
+          const amt = Math.round(currentBetAmount() * 100) / 100;
+          if (amt > 0 && amt > Shell.getBalance()) { Shell.notify("Insufficient balance."); return; }
+          if (amt > 0 && Shell.isBelowMinBet(amt)) { Shell.notify("Minimum bet is $0.10."); return; }
+
+          state.busy = true;
+          state.lastResult = null;
+          state.showResultOverlay = false;
+          render();
+
+          runTileRevealSequence(state.picks.slice(), (drawn) => {
+            const result = playRound(amt, state.picks.slice(), drawn);
+            recordBet(amt, result);
+            state.lastResult = result;
+            state.showResultOverlay = amt === 0 || result.profit > 0;
+            state.busy = false;
+            render();
+          });
+        }
+
+        // ---------------------------------------------------------------
+        // AUTO MODE — same shape as Dice's auto mode.
+        // ---------------------------------------------------------------
+        function startAuto() {
+          if (state.picks.length < MIN_PICKS) { Shell.notify("Select at least 1 number."); return; }
+          const auto = state.auto;
+          const requestedBet = currentBetAmount();
+          const balance = Shell.getBalance();
+          if (requestedBet > 0 && (balance <= 0 || requestedBet > balance)) { render(); return; }
+          if (requestedBet > 0 && Shell.isBelowMinBet(requestedBet)) { Shell.notify("Minimum bet is $0.10."); render(); return; }
+          const num = parseInt(auto.numBets, 10);
+          auto.betsRemaining = auto.numBets.trim() !== "" && !isNaN(num) && num > 0 ? num : null;
+          auto.running = true;
+          auto.currentProfit = 0;
+          auto.lastGameProfit = 0;
+          auto.baseBet = requestedBet;
+          render();
+          runAutoStep();
+        }
+        function stopAuto() { state.auto.running = false; render(); }
+
+        function runAutoStep() {
+          const auto = state.auto;
+          if (!auto.running) return;
+          if (auto.betsRemaining !== null && auto.betsRemaining <= 0) { stopAuto(); return; }
+
+          const betAmount = Math.min(currentBetAmount(), Shell.getBalance() || Infinity);
+          if (betAmount > 0 && betAmount > Shell.getBalance()) { stopAuto(); return; }
+          if (betAmount > 0 && Shell.isBelowMinBet(betAmount)) { stopAuto(); return; }
+
+          state.busy = true;
+          render();
+          Shell.playChipSound("place", state.settings.volume);
+
+          setTimeout(() => {
+            const result = playRound(betAmount, state.picks.slice());
+            recordBet(betAmount, result);
+            state.lastResult = result;
+            state.showResultOverlay = betAmount === 0 || result.profit > 0;
+            auto.currentProfit += result.profit;
+            auto.lastGameProfit = result.profit;
+            if (result.won) Shell.playWinDing(state.settings.volume);
+
+            if (result.won) {
+              const pct = parseFloat(auto.onWinPct) || 0;
+              if (pct !== 0) {
+                const next = betAmount * Math.max(0, 1 + pct / 100);
+                state.betAmount = next.toFixed(2);
+              }
+            } else {
+              const pct = parseFloat(auto.onLossPct) || 0;
+              if (pct !== 0) {
+                const next = betAmount * Math.max(0, 1 + pct / 100);
+                state.betAmount = next.toFixed(2);
+              }
+            }
+
+            if (auto.betsRemaining !== null) auto.betsRemaining -= 1;
+            state.busy = false;
+
+            const stopProfit = parseFloat(auto.stopOnProfit);
+            const stopLoss = parseFloat(auto.stopOnLoss);
+            let shouldStop = false;
+            if (!isNaN(stopProfit) && stopProfit > 0 && auto.currentProfit >= stopProfit) shouldStop = true;
+            if (!isNaN(stopLoss) && stopLoss > 0 && auto.currentProfit <= -stopLoss) shouldStop = true;
+            if (auto.betsRemaining !== null && auto.betsRemaining <= 0) shouldStop = true;
+
+            render();
+            if (shouldStop || !auto.running) { stopAuto(); return; }
+            setTimeout(runAutoStep, 700);
+          }, 550);
+        }
+
+        // Live-stats panel markup/behavior now lives in shell.js (Shell.statsPanelHTML /
+        // Shell.bindStatsPanel / Shell.attachStatsPanelDrag) and is shared by every game.
+        Shell.attachStatsPanelDrag(state, render);
+
+        // ---------------------------------------------------------------
+        // 5) RENDER
+        // ---------------------------------------------------------------
+        function demoPayoutBoxHTML(betAmount, bestMult) {
+          const demo = betAmount <= 0;
+          if (demo) return "";
+          return `<div class="demo-payout-box"><div class="demo-payout-top amt">${Shell.fmtMoney(betAmount * bestMult)}</div></div>`;
+        }
+
+        function ladderHTML(picksCount, hitsCount, resolved, betAmt) {
+          const row = paytableFor(picksCount);
+          if (!row) return "";
+          const boxes = row.map((mult, matches) => {
+            const isHit = resolved && matches === hitsCount;
+            const isZero = mult === 0;
+            const chance = chanceFor(picksCount, matches);
+            const payout = (betAmt > 0 ? betAmt : 1) * mult;
+            const payoutLabel = betAmt > 0 ? Shell.fmtMoney(payout) : (mult.toFixed(mult >= 100 ? 0 : 2) + "x");
+            return `<div class="keno-mult-box ${isHit ? "hit" : ""} ${isZero ? "zero" : ""}" data-mult-hover>
+              <strong>${mult.toFixed(mult >= 100 ? 0 : 2)}x</strong>
+              <span>${matches}${svg("gift")}</span>
+              <div class="keno-mult-tip">
+                <div class="keno-mult-tip-row"><span>Payout</span><span>Chance</span></div>
+                <div class="keno-mult-tip-row vals"><strong>${payoutLabel}</strong><strong>${fmtChance(chance)}</strong></div>
+              </div>
+            </div>`;
+          }).join("");
+          return `<div class="keno-mult-ladder" style="--keno-cols:${row.length};">${boxes}</div>`;
+        }
+
+        function resultOverlayHTML(r) {
+          const isDemo = !(r && r.betAmount > 0);
+          return `<div class="keno-result-overlay" data-result-overlay>
+            <div class="keno-result-card ${r.won ? "win" : "lose"}">
+              <div class="keno-result-mult">${r.payoutLabel}</div>
+              ${isDemo
+                ? `<div class="keno-result-demo">Demo Mode</div>`
+                : `<div class="keno-result-amt win">+${Shell.fmtMoney(r.betAmount * r.mult)}</div>`}
+            </div>
+          </div>`;
+        }
+
+        function boardHTML() {
+          const reveal = state.revealing;
+          const r = state.lastResult;
+
+          // While the manual-bet reveal animation is stepping through the
+          // draw, each of the 10 drawn numbers is placed onto the board one
+          // at a time — landing green on a tile the player picked, or plain
+          // on one they didn't. Numbers not yet drawn in the sequence, and
+          // any of the player's picks that never get called, stay in their
+          // normal resting state (picked/unpicked) until their turn comes.
+          if (reveal) {
+            const revealedDrawn = reveal.revealedDrawn;
+            let tiles = "";
+            for (let n = 1; n <= BOARD_SIZE; n++) {
+              const picked = state.picks.includes(n);
+              let cls = picked ? "picked" : "";
+              let inner = String(n);
+              if (revealedDrawn.has(n)) {
+                if (picked) {
+                  cls += " hit" + (n === reveal.justRevealed ? " hit-pop" : "");
+                } else {
+                  cls += " miss" + (n === reveal.justRevealed ? " hit-pop" : "");
+                }
+              }
+              tiles += `<button class="keno-tile ${cls}" data-tile="${n}" disabled>${inner}</button>`;
+            }
+            return `<div class="keno-board">${tiles}</div>`;
+          }
+
+          const drawnSet = r ? new Set(r.drawn) : null;
+          const hitsSet = r ? new Set(r.hits) : null;
+          let tiles = "";
+          for (let n = 1; n <= BOARD_SIZE; n++) {
+            const picked = state.picks.includes(n);
+            let cls = picked ? "picked" : "";
+            let inner = String(n);
+            if (r && drawnSet.has(n)) {
+              if (picked && hitsSet.has(n)) {
+                cls += " hit";
+                inner = String(n);
+              } else if (!picked) {
+                cls += " miss";
+              } else {
+                cls += " miss picked";
+              }
+            }
+            const disabled = state.busy || state.auto.running || state.autoPicking;
+            tiles += `<button class="keno-tile ${cls}" data-tile="${n}" ${disabled ? "disabled" : ""}>${inner}</button>`;
+          }
+          return `<div class="keno-board">${tiles}</div>`;
+        }
+
+        function render() {
+          const balance = Shell.getBalance();
+          const betAmt = currentBetAmount();
+          const insufficientBalance = betAmt > 0 && betAmt > balance;
+          const belowMinBet = betAmt > 0 && Shell.isBelowMinBet(betAmt);
+          const r = state.lastResult;
+          const auto = state.auto;
+
+          const picksCount = state.picks.length;
+          const row = paytableFor(picksCount || 1);
+          const bestMult = row ? Math.max(...row) : 0;
+
+          const numBetsGreyed = auto.numBets.trim() === "";
+          const betsRemainingDisplay = auto.betsRemaining === null ? "" : String(auto.betsRemaining);
+
+          const canPlace = !state.busy && !state.autoPicking && !insufficientBalance && !belowMinBet && picksCount >= MIN_PICKS;
+
+          content.innerHTML = `
+            <div class="game-page">
+              <div class="game-shell">
+                <div class="shell-grid">
+
+                  <header class="title-bar">
+                    <button class="game-icon-btn hover-tip" data-hover-tip="Game info" data-info>${svg("safe")}</button>
+                    <div class="title-name">${svg("sparkles")} ${GAME_NAME}</div>
+                    <button class="fair-play-btn" data-fair-play>${svg("safe")} Fair Play</button>
+                  </header>
+
+                  <aside class="sidebar">
+                    <div class="mode-toggle">
+                      <button class="mode-btn ${state.mode === "manual" ? "active" : ""}" data-mode-manual ${auto.running ? "disabled" : ""}>Manual</button>
+                      <button class="mode-btn ${state.mode === "auto" ? "active" : ""}" data-mode-auto ${auto.running ? "disabled" : ""}>Auto</button>
+                    </div>
+
+                    <div class="field-label">Bet Amount</div>
+                    <div class="bet-input-row">
+                      <span class="prefix">$</span>
+                      <input type="text" inputmode="decimal" placeholder="0.00" value="${state.betAmount}" data-bet-input class="${(insufficientBalance || belowMinBet) ? "error" : ""}" ${state.busy || auto.running ? "disabled" : ""}>
+                      <div class="bet-quick">
+                        <button data-half ${state.busy || auto.running ? "disabled" : ""}>½</button>
+                        <button data-double-bet ${state.busy || auto.running ? "disabled" : ""}>2×</button>
+                      </div>
+                    </div>
+                    ${insufficientBalance ? `<div class="balance-error">Insufficient balance</div>` : (belowMinBet ? `<div class="balance-error">Minimum bet is $0.10</div>` : "")}
+
+                    <div class="field-label">Risk</div>
+                    <div class="keno-risk-row">
+                      <button class="keno-risk-toggle ${state.riskOpen ? "open" : ""}" data-risk-toggle ${state.busy || auto.running ? "disabled" : ""}>
+                        ${state.risk}${svg("chevronDown")}
+                      </button>
+                      ${state.riskOpen ? `
+                      <div class="keno-risk-menu">
+                        ${["low", "medium", "high"].map((r2) => `<button class="${state.risk === r2 ? "active" : ""}" data-risk-pick="${r2}">${r2}</button>`).join("")}
+                      </div>` : ""}
+                    </div>
+
+                    <div class="keno-action-row">
+                      <button class="keno-action-btn" data-autopick ${state.busy || auto.running || state.autoPicking ? "disabled" : ""}>${svg("bolt")} Auto Pick</button>
+                      <button class="keno-action-btn" data-clear-table ${state.busy || auto.running || state.autoPicking || picksCount === 0 ? "disabled" : ""}>${svg("x")} Clear Table</button>
+                    </div>
+
+                    ${state.mode === "auto" ? `
+                    <div class="field-label row"><span>Number of Bets</span></div>
+                    <div class="plain-input-row">
+                      ${numBetsGreyed ? `<span class="infinity-icon">∞</span>` : ""}
+                      <input type="text" inputmode="numeric" class="${numBetsGreyed ? "greyed with-icon" : ""}" placeholder="Infinite" value="${auto.running ? betsRemainingDisplay : auto.numBets}" data-num-bets ${auto.running ? "disabled" : ""}>
+                    </div>
+
+                    <div class="field-label">On Win</div>
+                    <div class="win-loss-row">
+                      <button class="reset-chip" data-win-reset ${auto.running ? "disabled" : ""}>${svg("rotate")} Reset</button>
+                      <span class="win-loss-label">Increase By</span>
+                      <input type="text" inputmode="text" placeholder="0.00" value="${auto.onWinPct}" data-win-pct ${auto.running ? "disabled" : ""}>
+                      <span class="win-loss-suffix">%</span>
+                    </div>
+
+                    <div class="field-label">On Loss</div>
+                    <div class="win-loss-row">
+                      <button class="reset-chip" data-loss-reset ${auto.running ? "disabled" : ""}>${svg("rotate")} Reset</button>
+                      <span class="win-loss-label">Increase By</span>
+                      <input type="text" inputmode="text" placeholder="0.00" value="${auto.onLossPct}" data-loss-pct ${auto.running ? "disabled" : ""}>
+                      <span class="win-loss-suffix">%</span>
+                    </div>
+
+                    <div class="field-label row"><span>Stop On Profit</span><span>Stop On Loss</span></div>
+                    <div class="two-col">
+                      <div class="stop-input-row"><input type="text" inputmode="decimal" placeholder="0.00" value="${auto.stopOnProfit}" data-stop-profit ${auto.running ? "disabled" : ""}></div>
+                      <div class="stop-input-row"><input type="text" inputmode="decimal" placeholder="0.00" value="${auto.stopOnLoss}" data-stop-loss ${auto.running ? "disabled" : ""}></div>
+                    </div>
+
+                    <div class="auto-info-box">
+                      <div><span>Current Profit</span><strong class="${auto.currentProfit >= 0 ? "positive" : "negative"}">${auto.currentProfit >= 0 ? "+$" : "-$"}${Math.abs(auto.currentProfit).toFixed(2)}</strong></div>
+                      <div><span>Last Game Profit</span><strong class="${auto.lastGameProfit >= 0 ? "positive" : "negative"}">${auto.lastGameProfit >= 0 ? "+$" : "-$"}${Math.abs(auto.lastGameProfit).toFixed(2)}</strong></div>
+                    </div>
+
+                    <button class="place-bet-btn ${auto.running ? "stop" : (betAmt > 0 ? "" : "demo")}" data-auto-toggle ${(auto.running || (picksCount >= MIN_PICKS && !insufficientBalance && !belowMinBet)) ? "" : "disabled"}>
+                      ${auto.running ? "Stop Auto Bet" : (betAmt > 0 ? "Start Auto Bet" : "Start Demo Auto Bet")}
+                    </button>
+                    ${betAmt > 0 ? "" : `<div class="demo-hint-wrap"><div class="demo-hint">Enter Bet Amount For Real Play</div></div>`}
+                    ` : `
+                    <button class="place-bet-btn ${state.busy ? "busy" : (betAmt > 0 ? "" : "demo")}" data-place ${!canPlace ? "disabled" : ""}>
+                      ${state.busy ? "Drawing…" : (betAmt > 0 ? "Place Bet" : "Place Demo Bet")}
+                    </button>
+                    ${betAmt > 0 ? "" : `<div class="demo-hint-wrap"><div class="demo-hint">Enter Bet Amount For Real Play</div></div>`}
+                    `}
+
+                    <div class="sidebar-meta">
+                      <div class="sidebar-meta-row"><span>Balance</span><strong>${Shell.fmtMoney(balance)}</strong></div>
+                    </div>
+                  </aside>
+
+                  <section class="game-box keno-stage">
+                    <div class="keno-board-wrap">
+                      ${boardHTML()}
+                      ${picksCount === 0
+                        ? `<div class="keno-hint">${svg("wrench")}<span>Select 1-10 Numbers</span></div>`
+                        : ladderHTML(picksCount, r ? r.hits.length : -1, !!r, betAmt)}
+                    </div>
+                    ${r && state.showResultOverlay ? resultOverlayHTML(r) : ""}
+                  </section>
+
+                  <footer class="bottom-bar">
+                    <div class="bottom-icons">
+                      <div style="position:relative;">
+                        <button class="bottom-icon-btn ${state.settingsOpen ? "active" : ""}" data-settings-toggle title="Settings">${svg("settings")}</button>
+                        ${state.settingsOpen ? `
+                        <div class="popover" data-settings-popover>
+                          <div class="popover-title">Game Settings</div>
+                          <div class="popover-row"><span>Animations</span><button class="switch ${state.settings.animations ? "on" : ""}" data-toggle-setting="animations" ${Shell.isAnimationsDisabled() ? "disabled" : ""}></button></div>
+                          <div class="volume-row"><span>Volume — ${state.settings.volume}%</span><input type="range" min="0" max="100" value="${state.settings.volume}" data-volume-slider></div>
+                        </div>` : ""}
+                      </div>
+                      <button class="bottom-icon-btn ${state.favorite ? "fav-on" : ""}" data-fav-toggle title="Favorite">${svg("heart")}</button>
+                      <button class="bottom-icon-btn ${state.statsOpen ? "active" : ""}" data-stats-toggle title="Live stats">${svg("activity")}</button>
+                    </div>
+                    <div class="bottom-logo">Neon Jackpot</div>
+                  </footer>
+                </div>
+
+                ${Shell.statsPanelHTML(state, GAME_ID, GAME_NAME)}
+              </div>
+            </div>
+
+            ${state.infoOpen ? `
+            <div class="modal-overlay" data-info-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>${GAME_NAME}</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Pick between 1 and 10 numbers on the board, then place a bet. 10 winning numbers are drawn at random out of 40. Your payout depends on how many of your picks match the draw, and on the risk level you choose.</p>
+                <p>Higher risk means bigger multipliers for a full match, but zero payout across more of the lower-match outcomes. Every risk tier caps out at a maximum multiplier of 1000x.</p>
+              </div>
+            </div>` : ""}
+
+            ${state.fairPlayOpen ? `
+            <div class="modal-overlay" data-fair-play-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>${svg("safe")} Fair Play</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Each round draws 10 fresh numbers out of 40 from your current seed. The outcome is decided the instant you place the bet — nothing about the reveal animation changes the result.</p>
+                <div class="seed-row">
+                  <input type="text" value="${state.clientSeed}" data-client-seed>
+                  <button class="seed-randomize ${state.seedSpinning ? "spin" : ""}" data-randomize-seed>${svg("rotate")} Randomize</button>
+                </div>
+                <div class="seed-note">This is a demo — randomizing your seed reloads the game.</div>
+              </div>
+            </div>` : ""}
+          `;
+
+          bind();
+        }
+
+        // ---------------------------------------------------------------
+        // BIND
+        // ---------------------------------------------------------------
+        function refocus(sel) {
+          const el = document.querySelector(sel);
+          if (el) { el.focus(); const v = el.value; el.value = ""; el.value = v; }
+        }
+
+        function bind() {
+          if (state.showResultOverlay) {
+            document.querySelector(".sidebar")?.addEventListener("click", dismissResultOverlay);
+            document.querySelector("[data-result-overlay]")?.addEventListener("click", dismissResultOverlay);
+          }
+          document.querySelector("[data-place]")?.addEventListener("click", placeBet);
+          document.querySelector("[data-auto-toggle]")?.addEventListener("click", () => { if (state.auto.running) stopAuto(); else startAuto(); });
+
+          document.querySelector("[data-mode-manual]")?.addEventListener("click", () => { state.mode = "manual"; render(); });
+          document.querySelector("[data-mode-auto]")?.addEventListener("click", () => { state.mode = "auto"; render(); });
+
+          document.querySelectorAll("[data-tile]").forEach((btn) => btn.addEventListener("click", () => toggleTile(parseInt(btn.dataset.tile, 10))));
+          document.querySelector("[data-autopick]")?.addEventListener("click", autoPick);
+          document.querySelector("[data-clear-table]")?.addEventListener("click", clearTable);
+
+          document.querySelector("[data-risk-toggle]")?.addEventListener("click", (e) => { e.stopPropagation(); state.riskOpen = !state.riskOpen; render(); });
+          document.querySelectorAll("[data-risk-pick]").forEach((btn) => btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            state.risk = btn.dataset.riskPick;
+            state.riskOpen = false;
+            state.lastResult = null;
+            render();
+          }));
+
+          const betInput = document.querySelector("[data-bet-input]");
+          betInput?.addEventListener("input", (e) => {
+            state.betAmount = e.target.value.replace(/[^0-9.]/g, "");
+            render();
+            refocus("[data-bet-input]");
+          });
+          document.querySelector("[data-half]")?.addEventListener("click", () => {
+            const b = parseFloat(state.betAmount) || 0;
+            state.betAmount = (b / 2).toFixed(2);
+            render();
+          });
+          document.querySelector("[data-double-bet]")?.addEventListener("click", () => {
+            const b = parseFloat(state.betAmount) || 0;
+            state.betAmount = Math.min(b * 2 || 0, Shell.getBalance()).toFixed(2);
+            render();
+          });
+
+          // ---- auto-mode controls ----
+          document.querySelector("[data-num-bets]")?.addEventListener("input", (e) => { state.auto.numBets = e.target.value.replace(/[^0-9]/g, ""); render(); refocus("[data-num-bets]"); });
+          document.querySelector("[data-win-reset]")?.addEventListener("click", () => { state.auto.onWinPct = ""; render(); });
+          document.querySelector("[data-loss-reset]")?.addEventListener("click", () => { state.auto.onLossPct = ""; render(); });
+          document.querySelector("[data-win-pct]")?.addEventListener("input", (e) => { state.auto.onWinPct = sanitizeSignedDecimal(e.target.value); render(); refocus("[data-win-pct]"); });
+          document.querySelector("[data-loss-pct]")?.addEventListener("input", (e) => { state.auto.onLossPct = sanitizeSignedDecimal(e.target.value); render(); refocus("[data-loss-pct]"); });
+          document.querySelector("[data-stop-profit]")?.addEventListener("input", (e) => { state.auto.stopOnProfit = e.target.value.replace(/[^0-9.]/g, ""); render(); refocus("[data-stop-profit]"); });
+          document.querySelector("[data-stop-loss]")?.addEventListener("input", (e) => { state.auto.stopOnLoss = e.target.value.replace(/[^0-9.]/g, ""); render(); refocus("[data-stop-loss]"); });
+
+          document.querySelector("[data-info]")?.addEventListener("click", () => { state.infoOpen = true; render(); });
+          document.querySelector("[data-fair-play]")?.addEventListener("click", () => { state.fairPlayOpen = true; render(); });
+          document.querySelectorAll("[data-modal-close]").forEach((btn) => btn.onclick = () => { state.infoOpen = false; state.fairPlayOpen = false; render(); });
+          document.querySelector("[data-info-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.infoOpen = false; render(); } });
+          document.querySelector("[data-fair-play-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.fairPlayOpen = false; render(); } });
+          document.querySelector("[data-client-seed]")?.addEventListener("input", (e) => { state.clientSeed = e.target.value; });
+          document.querySelector("[data-randomize-seed]")?.addEventListener("click", () => { location.reload(); });
+
+          document.querySelector("[data-settings-toggle]")?.addEventListener("click", () => { state.settingsOpen = !state.settingsOpen; render(); });
+          document.querySelector("[data-toggle-setting]")?.addEventListener("click", (e) => {
+            const key = e.currentTarget.dataset.toggleSetting;
+            state.settings[key] = !state.settings[key];
+            render();
+          });
+          document.querySelector("[data-volume-slider]")?.addEventListener("input", (e) => { state.settings.volume = parseInt(e.target.value, 10); });
+
+          document.querySelector("[data-fav-toggle]")?.addEventListener("click", () => {
+            Shell.toggleFavorite(GAME_ID);
+            state.favorite = Shell.getFavorites().includes(GAME_ID);
+            render();
+          });
+
+          document.querySelector("[data-stats-toggle]")?.addEventListener("click", () => { state.statsOpen = !state.statsOpen; render(); });
+          Shell.bindStatsPanel(state, render);
+        }
+
+        function sanitizeSignedDecimal(raw) {
+          let s = raw.replace(/[^0-9.\-]/g, "");
+          const negative = s.startsWith("-");
+          s = s.replace(/-/g, "");
+          const firstDot = s.indexOf(".");
+          if (firstDot !== -1) s = s.slice(0, firstDot + 1) + s.slice(firstDot + 1).replace(/\./g, "");
+          return (negative ? "-" : "") + s;
+        }
+
+        // click-outside-to-close for settings + risk popovers
+        document.addEventListener("click", (e) => {
+          let needsRender = false;
+          if (state.settingsOpen && !e.target.closest("[data-settings-popover]") && !e.target.closest("[data-settings-toggle]")) {
+            state.settingsOpen = false; needsRender = true;
+          }
+          if (state.riskOpen && !e.target.closest(".keno-risk-row")) {
+            state.riskOpen = false; needsRender = true;
+          }
+          if (needsRender) render();
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

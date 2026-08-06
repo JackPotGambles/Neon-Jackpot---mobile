@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Neon Jackpot fictional arcade demo — Moles" />
+    <title>Moles · Neon Jackpot</title>
+    <link rel="stylesheet" href="./shell.css" />
+    <link rel="stylesheet" href="./game-frame.css" />
+    <style>
+      .game-box.moles-stage {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        padding: 24px;
+        background: #0f1220;
+      }
+      .moles-board {
+        position: relative;
+        width: 100%;
+        max-width: 620px;
+        aspect-ratio: 827 / 686;
+        margin: auto;
+      }
+      .mole-hole {
+        position: absolute;
+        width: 21%;
+        aspect-ratio: 1 / 1;
+        transform: translate(-50%, -50%);
+        border-radius: 50%;
+        background: radial-gradient(circle at 38% 32%, #3a4468, #232b48 62%, #1a2038 100%);
+        border: 1px solid rgba(255,255,255,.08);
+        box-shadow: 0 10px 0 rgba(0,0,0,.28), inset 0 4px 10px rgba(0,0,0,.35);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: visible;
+        z-index: 1;
+      }
+      .mole-hole.popped, .mole-hole.missed { z-index: 4; }
+      .moles-board.is-active .mole-hole.clickable { cursor: pointer; transition: transform .12s ease, box-shadow .15s ease; }
+      .moles-board.is-active .mole-hole.clickable:hover { transform: translate(-50%, -50%) scale(1.045); box-shadow: 0 10px 0 rgba(0,0,0,.28), 0 0 0 3px rgba(124,92,255,.4), inset 0 4px 10px rgba(0,0,0,.35); }
+
+      /* glowing outline on the exact hole you clicked: green for a hit, red for a miss */
+      .mole-hole.win-hit {
+        box-shadow: 0 10px 0 rgba(0,0,0,.28), 0 0 0 3px rgba(92,255,166,.9), 0 0 22px 4px rgba(92,255,166,.65), inset 0 4px 10px rgba(0,0,0,.35);
+      }
+      .mole-hole.missed {
+        box-shadow: 0 10px 0 rgba(0,0,0,.28), 0 0 0 3px rgba(255,59,86,.9), 0 0 22px 4px rgba(255,59,86,.55), inset 0 4px 10px rgba(0,0,0,.35);
+      }
+
+      /* multiplier text floating above the hole you just hit */
+      .mole-mult-label {
+        position: absolute;
+        left: 50%; top: -14%;
+        transform: translate(-50%, -100%);
+        font-family: var(--mono);
+        font-size: 15px;
+        font-weight: 800;
+        color: #5cffa6;
+        text-shadow: 0 0 10px rgba(92,255,166,.75), 0 2px 6px rgba(0,0,0,.6);
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity .2s ease, transform .2s ease;
+      }
+      .mole-hole.win-hit .mole-mult-label { opacity: 1; transform: translate(-50%, -130%); }
+      .no-animations .mole-mult-label { transition: none !important; }
+
+      /* mole art: a clipping "window" hides everything below the hole's ground line, so the
+         mole is always physically there — it just slides up from underground into view,
+         rather than fading or scaling in. */
+      .mole-hole .hole-window {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 140%;
+        overflow: hidden;
+        pointer-events: none;
+      }
+      .mole-hole .hole-img {
+        position: absolute;
+        left: 50%;
+        bottom: 0;
+        width: 92%;
+        object-fit: contain;
+        object-position: bottom center;
+        transform: translate(-50%, 100%);
+        pointer-events: none;
+        transition: transform .18s cubic-bezier(.28,1.55,.55,1);
+      }
+      .mole-hole.popped .hole-img { transform: translate(-50%, 0); }
+
+      /* red X for a miss — drawn with CSS, no image needed */
+      .mole-x {
+        position: absolute; inset: -6%;
+        display: flex; align-items: center; justify-content: center;
+        opacity: 0; transform: scale(.3);
+        transition: transform .26s cubic-bezier(.28,1.65,.55,1), opacity .16s ease;
+        pointer-events: none;
+      }
+      .mole-hole.missed .mole-x { opacity: 1; transform: scale(1); }
+      .mole-x svg { width: 66%; height: 66%; overflow: visible; }
+      .mole-x svg line { stroke: #ff3b56; stroke-width: 13; stroke-linecap: round; filter: drop-shadow(0 0 8px rgba(255,59,86,.6)); }
+
+      .no-animations .mole-hole, .no-animations .hole-img, .no-animations .mole-x, .no-animations .moles-result-overlay { transition: none !important; animation: none !important; }
+      .no-animations .moles-board.is-active .mole-hole.clickable:hover { transform: translate(-50%, -50%); }
+
+      /* hammer that appears above a hole on hover and swings down when you click it */
+      .mole-hammer {
+        position: absolute;
+        top: -32%;
+        left: 50%;
+        font-size: 32px;
+        line-height: 1;
+        transform: translate(-50%, 0) rotate(-25deg);
+        transform-origin: 70% 85%;
+        pointer-events: none;
+        z-index: 6;
+        opacity: 0;
+        filter: drop-shadow(0 4px 6px rgba(0,0,0,.5));
+        transition: opacity .12s ease;
+      }
+      .moles-board.is-active .mole-hole.clickable:hover .mole-hammer { opacity: 1; }
+      .mole-hammer.swing { animation: moles-hammer-swing .28s ease; }
+      @keyframes moles-hammer-swing {
+        0% { transform: translate(-50%, 0) rotate(-25deg); }
+        50% { transform: translate(-50%, 0) rotate(55deg); }
+        100% { transform: translate(-50%, 0) rotate(-25deg); }
+      }
+      .no-animations .mole-hammer.swing { animation: none !important; }
+      .no-animations .mole-hammer { transition: none !important; }
+
+      .moles-result-overlay {
+        position: absolute; inset: 0; z-index: 5;
+        display: grid; place-items: center;
+        background: rgba(8, 9, 16, .62);
+        backdrop-filter: blur(1.5px);
+        border-radius: inherit;
+        animation: moles-overlay-in .18s ease;
+        cursor: pointer;
+      }
+      @keyframes moles-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+      .moles-result-card {
+        display: flex; flex-direction: column; align-items: center; gap: 6px;
+        padding: 22px 34px; background: #171c2c; border: 1px solid var(--line); border-radius: 16px;
+        box-shadow: 0 20px 50px rgba(0,0,0,.45);
+        cursor: default;
+      }
+      .moles-result-card.win { border-color: rgba(92,255,231,.5); }
+      .moles-result-card.lose { border-color: rgba(255,110,143,.35); }
+      .moles-result-mult { font-family: var(--mono); font-size: 26px; font-weight: 800; color: var(--mint); }
+      .moles-result-card.lose .moles-result-mult { color: #ff9fae; }
+      .moles-result-amt { font-family: var(--mono); font-size: 13px; font-weight: 700; }
+      .moles-result-amt.win { color: var(--mint); }
+      .moles-result-amt.lose { color: #ff9fae; }
+
+      /* ---- mode tabs (Manual / Auto) ---- */
+      .mode-tabs { display: flex; gap: 4px; padding: 4px; margin-bottom: 14px; background: #0c0e18; border: 1px solid var(--line); border-radius: 11px; }
+      .mode-tab { flex: 1; padding: 9px 0; color: #7c88a0; background: transparent; border: 0; border-radius: 8px; font-size: 12px; font-weight: 800; }
+      .mode-tab.active { color: #fff; background: #3557e0; }
+
+      /* ---- moles-count control (slider) ---- */
+      .moles-count-row { display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 12px; background: #121522; border: 1px solid var(--line); border-radius: 10px; }
+      .moles-count-label { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #8791a6; }
+      .moles-count-label strong { font-family: var(--mono); font-size: 14px; font-weight: 800; color: var(--text); }
+      .moles-count-slider {
+        -webkit-appearance: none; appearance: none;
+        width: 100%; height: 8px; border-radius: 4px; outline: none; margin: 2px 0;
+        background: linear-gradient(90deg, #6c4bff, #7c5cff var(--fill, 0%), #262c42 var(--fill, 0%), #262c42 100%);
+      }
+      .moles-count-slider::-webkit-slider-thumb {
+        -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+        background: #fff; border: 3px solid #6c4bff; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.4);
+      }
+      .moles-count-slider::-moz-range-thumb {
+        width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid #6c4bff; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.4);
+      }
+      .moles-count-slider::-moz-range-track { background: transparent; }
+      .moles-count-slider:disabled { opacity: .55; }
+      .moles-count-slider:disabled::-webkit-slider-thumb { cursor: default; }
+
+      .profit-box { margin-top: 12px; background: rgba(255,255,255,.03); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+      .profit-box-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; }
+      .profit-box-col { display: flex; flex-direction: column; gap: 3px; }
+      .profit-box-col.right { align-items: flex-end; }
+      .profit-box-col span { font-size: 10px; color: #69758c; }
+      .profit-box-col strong { font-family: var(--mono); font-size: 13px; }
+      .profit-box-col.left strong { color: var(--mint); }
+      .profit-box-chevron { color: #4c5468; }
+      .profit-box-bottom { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 0; background: rgba(0,0,0,.15); font-family: var(--mono); font-size: 11px; font-weight: 700; }
+      .profit-box-bottom .cur { color: var(--mint); }
+      .profit-box-bottom .divider { color: #3a4256; }
+      .profit-box-bottom .nxt { color: #8791a6; }
+
+      .moles-pickrandom-btn {
+        width: 100%; margin-top: 12px; padding: 13px 0; color: #fff;
+        background: linear-gradient(120deg, #7c3aed, #6c4bff); border: 0; border-radius: 12px;
+        font-size: 12.5px; font-weight: 800;
+      }
+      .moles-pickrandom-btn:disabled { color: #6c7488; background: #1b2032; }
+      .moles-cashout-btn {
+        width: 100%; margin-top: 8px; padding: 14px 0; color: #04140f;
+        background: linear-gradient(120deg, #38d787, #63f0ab); border: 0; border-radius: 12px;
+        font-size: 13px; font-weight: 800;
+      }
+      .moles-cashout-btn:disabled { color: #6c7488; background: #1b2032; }
+    </style>
+  </head>
+  <body>
+    <div class="site-shell">
+      <div class="site-grid">
+        <div id="site-sidebar"></div>
+        <div id="site-topbar"></div>
+        <div id="page-content"></div>
+      </div>
+    </div>
+    <script src="./promo-vault.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="./chat.js"></script>
+    <script src="./shell.js"></script>
+    <script src="./games.js"></script>
+    <script>
+      (() => {
+        const GAME_NAME = "Moles";
+        const GAME_ID = "moles";
+
+        Shell.mount({ activeTab: "Games" });
+        Chat.mount();
+        document.addEventListener("nj:animations", (e) => { state.settings.animations = !e.detail; render(); });
+        const content = document.getElementById("page-content");
+        const svg = Shell.svg;
+
+        const HOLES = 7;
+        const MAX_MULT = 5649504.98; // absolute ceiling (1-mole value), used for display/fair-play copy only
+        const MAX_MULT_BY_RISK = {
+          1: 5649504.98,
+          2: 21618.00,
+          3: 6176.57,
+          4: 1968.16,
+          5: 23.50,
+          6: 4.85,
+        };
+
+        // Board layout matches the honeycomb reference: top, upper-left/right,
+        // middle-center, lower-left/right, bottom — as percentages of the board box.
+        const HOLE_POS = [
+          { x: 49.8, y: 15.3 }, // 0 top-center
+          { x: 27.2, y: 31.2 }, // 1 upper-left
+          { x: 72.3, y: 31.2 }, // 2 upper-right
+          { x: 49.8, y: 46.9 }, // 3 middle-center
+          { x: 27.2, y: 62.5 }, // 4 lower-left
+          { x: 72.3, y: 62.5 }, // 5 lower-right
+          { x: 49.8, y: 78.1 }, // 6 bottom-center
+        ];
+
+        // Exact payout tables as specified (hit 1..10 per mole count). Multipliers beyond
+        // hit 10 extend using the same per-hit growth factor (HOLES / molesSelected) that
+        // already produces the table's own values, capped at MAX_MULT.
+        const RISK_MODES = {
+          6: { label: "6", table: [1.12, 1.30, 1.51, 1.75, 2.03, 2.36, 2.74, 3.18, 3.69, 4.29] },
+          5: { label: "5", table: [1.37, 1.92, 2.69, 3.76, 5.26, 7.36, 10.30, 14.42, 20.19, 28.26] },
+          4: { label: "4", table: [1.71, 2.99, 5.23, 9.15, 16.01, 28.02, 49.03, 85.80, 150.15, 262.76] },
+          3: { label: "3", table: [2.28, 5.32, 12.41, 28.95, 67.55, 157.61, 367.75, 858.08, 2002.19, 4671.77] },
+          2: { label: "2", table: [3.42, 11.97, 41.89, 146.61, 513.13, 1795.95, 6285.82, 22000.37, 77001.29, 269504.51] },
+          1: { label: "1", table: [6.85, 47.95, 335.65, 2349.55, 16446.85, 115127.95, 805895.65] },
+        };
+
+        function multiplierAt(k, level) {
+          if (level <= 0) return 1;
+          const cap = MAX_MULT_BY_RISK[k] ?? MAX_MULT;
+          const t = RISK_MODES[k].table;
+          if (level <= t.length) return Math.min(t[level - 1], cap);
+          const growth = HOLES / k;
+          const raw = t[t.length - 1] * Math.pow(growth, level - t.length);
+          return Math.min(Math.round(raw * 100) / 100, cap);
+        }
+
+        let audioCtx = null;
+        const getCtx = () => { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); return audioCtx; };
+        function playThump(volumePct) {
+          const v = volumePct / 100;
+          if (v <= 0) return;
+          try {
+            const ctx = getCtx();
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(160, now);
+            osc.frequency.exponentialRampToValueAtTime(50, now + 0.22);
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.55 * v, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+            osc.connect(g).connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.25);
+          } catch {}
+        }
+
+        const state = {
+          betAmount: "",
+          busy: false,
+          infoOpen: false,
+          fairPlayOpen: false,
+          settingsOpen: false,
+          statsOpen: false,
+          statsGame: "all",
+          statsGameDropdownOpen: false,
+          statsDrag: null,
+          statsPos: null,
+          favorite: Shell.getFavorites().includes(GAME_ID),
+          settings: { animations: !Shell.isAnimationsDisabled(), volume: 100 },
+          mode: "manual", // manual | auto (auto is a placeholder — not implemented)
+
+          risk: 6,             // number of moles hidden per attempt (1-6)
+          active: false,
+          betAmt: 0,
+          level: 0,             // moles found so far this round
+          currentMoles: null,   // Set of hole indices (0-6) holding a mole THIS attempt
+          revealSet: null,      // Set of hole indices currently shown popped (all moles for this pick)
+          missIdx: null,        // hole index currently showing the red X (a miss)
+          hitIdx: null,         // the specific hole the player clicked on a hit (gets the green glow + mult label)
+          hitMult: null,        // multiplier label text shown above hitIdx
+          lastResult: null,
+          showResultOverlay: false,
+        };
+
+        function buildMoleSet(k) {
+          const s = new Set();
+          while (s.size < k) s.add(Math.floor(Math.random() * HOLES));
+          return s;
+        }
+
+        function buildBetDetail() {
+          return {
+            type: "moles",
+            holes: HOLES,
+            moleCount: state.risk,
+            hitsThisRound: state.level,
+            finalMoles: state.currentMoles ? Array.from(state.currentMoles) : [],
+            missedHole: state.missIdx,
+          };
+        }
+
+        function recordBet(betAmount, result) {
+          Shell.addBetEntry({ game: GAME_ID, bet: betAmount, won: result.won, profit: result.profit, detail: buildBetDetail() });
+          if (result.won) Shell.addBalance(betAmount + result.profit);
+        }
+
+        function persistRound() {
+          if (!state.active) { Shell.clearActiveRound(GAME_ID); return; }
+          Shell.saveActiveRound(GAME_ID, {
+            risk: state.risk, betAmt: state.betAmt, level: state.level,
+            currentMoles: Array.from(state.currentMoles),
+          });
+        }
+
+        function startRound() {
+          if (state.busy || state.active) return;
+          const raw = parseFloat(state.betAmount);
+          let amt = state.betAmount !== "" && !isNaN(raw) && raw > 0 ? Math.round(raw * 100) / 100 : 0;
+          const balance = Shell.getBalance();
+          if (amt > 0 && (balance <= 0 || amt > balance)) { Shell.notify("Insufficient balance."); return; }
+          if (amt > 0 && Shell.isBelowMinBet(amt)) { Shell.notify("Minimum bet is $0.10."); return; }
+          amt = Math.min(amt, balance);
+
+          if (amt > 0) Shell.addBalance(-amt);
+          state.active = true;
+          state.betAmt = amt;
+          state.level = 0;
+          state.currentMoles = buildMoleSet(state.risk);
+          state.revealSet = null;
+          state.missIdx = null;
+          state.hitIdx = null;
+          state.hitMult = null;
+          state.lastResult = null;
+          state.showResultOverlay = false;
+          persistRound();
+          render();
+        }
+
+        // Timing for the reveal-and-retract animation on a hit.
+        const REVEAL_HOLD_MS = 1200; // how long ALL moles for this pick stay revealed before ducking back in
+        const POP_RETRACT_MS = 180;  // must match the CSS transition duration on .hole-img
+        const MISS_HOLD_MS = 650;    // how long the red X sits before the round settles
+
+        function settleLoss(idx) {
+          playThump(state.settings.volume);
+          const result = { won: false, profit: -state.betAmt, payout: 0, payoutLabel: "0.00x" };
+          recordBet(state.betAmt, result);
+          state.lastResult = result;
+          state.active = false;
+          state.busy = false;
+          state.showResultOverlay = true;
+          Shell.clearActiveRound(GAME_ID);
+          render();
+        }
+
+        function pickHole(idx) {
+          if (state.busy || !state.active) return;
+          if (state.revealSet || state.missIdx !== null) return;
+          if (!state.currentMoles) return;
+
+          state.busy = true;
+          const isMole = state.currentMoles.has(idx);
+          const animOn = state.settings.animations;
+
+          // show every mole hiding for this pick, not just the one clicked
+          state.revealSet = new Set(state.currentMoles);
+
+          if (!isMole) {
+            state.missIdx = idx;
+            render();
+            // on a loss, the reveal stays on screen until the next bet is placed
+            setTimeout(() => settleLoss(idx), animOn ? MISS_HOLD_MS : 0);
+            return;
+          }
+
+          // hit: mark the clicked hole for its own green glow + multiplier label
+          state.hitIdx = idx;
+          state.hitMult = `${multiplierAt(state.risk, state.level + 1).toFixed(2)}x`;
+
+          // pop every mole up out of its hole, hold briefly, then duck them all back down
+          render();
+          setTimeout(() => {
+            state.revealSet = null; // CSS transition slides them back down into their holes
+            state.hitIdx = null;
+            state.hitMult = null;
+            render();
+            setTimeout(() => {
+              state.level += 1;
+              Shell.playWinDing(state.settings.volume);
+
+              const mult = multiplierAt(state.risk, state.level);
+              const riskCap = MAX_MULT_BY_RISK[state.risk] ?? MAX_MULT;
+              if (mult >= riskCap) { state.busy = false; cashOut(true); return; }
+
+              // a fresh, independently-random set of moles hides for the next pick
+              state.currentMoles = buildMoleSet(state.risk);
+              state.busy = false;
+              persistRound();
+              render();
+            }, animOn ? POP_RETRACT_MS : 0);
+          }, animOn ? REVEAL_HOLD_MS : 0);
+        }
+
+        function pickRandomHole() {
+          if (state.busy || !state.active) return;
+          pickHole(Math.floor(Math.random() * HOLES));
+        }
+
+        function cashOut(auto) {
+          if (state.busy || !state.active || state.level < 1) return;
+          state.busy = true;
+          const mult = multiplierAt(state.risk, state.level);
+          const payout = state.betAmt * mult;
+          const result = { won: true, profit: payout - state.betAmt, payout, payoutLabel: `${mult.toFixed(2)}x` };
+          recordBet(state.betAmt, result);
+          state.lastResult = result;
+          // reveal where this attempt's remaining moles were hiding
+          state.revealSet = state.currentMoles ? new Set(state.currentMoles) : null;
+          state.missIdx = null;
+          state.hitIdx = null;
+          state.hitMult = null;
+          state.active = false;
+          state.busy = false;
+          state.showResultOverlay = true;
+          Shell.clearActiveRound(GAME_ID);
+          render();
+        }
+
+        function dismissResultOverlay(e) {
+          if (e && e.target.closest(".moles-result-card")) return;
+          if (!state.showResultOverlay) return;
+          state.showResultOverlay = false;
+          render();
+        }
+
+        function holeHTML(idx) {
+          const pos = HOLE_POS[idx];
+          const isPopped = !!(state.revealSet && state.revealSet.has(idx));
+          const isMissed = state.missIdx === idx;
+          const clickable = state.active && !state.busy && !state.revealSet && state.missIdx === null;
+
+          const cls = ["mole-hole"];
+          if (clickable) cls.push("clickable");
+          if (isPopped) cls.push("popped");
+          if (isMissed) cls.push("missed");
+          if (state.hitIdx === idx) cls.push("win-hit");
+
+          return `<div class="${cls.join(" ")}" style="left:${pos.x}%;top:${pos.y}%;" ${clickable ? `data-moles-hole="${idx}"` : ""}>
+            <div class="hole-window"><img class="hole-img" src="./art/mole art/mole.png" alt=""></div>
+            <span class="mole-x"><svg viewBox="0 0 100 100"><line x1="18" y1="18" x2="82" y2="82"/><line x1="82" y1="18" x2="18" y2="82"/></svg></span>
+            ${state.hitIdx === idx ? `<span class="mole-mult-label">${state.hitMult}</span>` : ""}
+            <span class="mole-hammer">🔨</span>
+          </div>`;
+        }
+
+        function boardHTML() {
+          const parts = HOLE_POS.map((_, i) => holeHTML(i)).join("");
+          return `<div class="moles-board ${state.active ? "is-active" : ""}">${parts}</div>`;
+        }
+
+        function resultOverlayHTML(r) {
+          return `<div class="moles-result-overlay" data-result-overlay>
+            <div class="moles-result-card ${r.won ? "win" : "lose"}">
+              <div class="moles-result-mult">${r.payoutLabel}</div>
+              <div class="moles-result-amt ${r.won ? "win" : "lose"}">${r.won ? "+" + Shell.fmtMoney(r.payout) : "-" + Shell.fmtMoney(Math.abs(r.profit))}</div>
+            </div>
+          </div>`;
+        }
+
+        function molesCountRowHTML() {
+          const pct = ((state.risk - 1) / 5) * 100;
+          return `<div class="moles-count-row">
+            <div class="moles-count-label"><span>Moles</span><strong>${state.risk}</strong></div>
+            <input type="range" class="moles-count-slider" data-risk-slider min="1" max="6" step="1"
+              value="${state.risk}" style="--fill:${pct}%" ${state.active ? "disabled" : ""}>
+          </div>`;
+        }
+
+        function render() {
+          const balance = Shell.getBalance();
+          const betRaw = parseFloat(state.betAmount);
+          const hasBet = state.betAmount !== "" && !isNaN(betRaw) && betRaw > 0;
+          const demoMode = !state.active && !hasBet;
+          const insufficientBalance = !state.active && hasBet && betRaw > balance;
+          const belowMinBet = !state.active && hasBet && Shell.isBelowMinBet(betRaw);
+          const canCashOut = state.active && state.level >= 1 && !state.busy;
+          const canPickRandom = state.active && !state.busy;
+          const currentMult = state.active && state.level >= 1 ? multiplierAt(state.risk, state.level) : 1;
+          const currentProfit = state.active && state.level >= 1 ? state.betAmt * currentMult - state.betAmt : 0;
+          const nextLevel = (state.active ? state.level : 0) + 1;
+          const nextMult = multiplierAt(state.risk, nextLevel);
+          const baseAmt = state.active ? state.betAmt : (parseFloat(state.betAmount) || 0);
+          const nextProfit = baseAmt > 0 ? baseAmt * nextMult - baseAmt : 0;
+          const r = state.lastResult;
+
+          content.innerHTML = `
+            <div class="game-page">
+              <div class="game-shell ${state.settings.animations ? "" : "no-animations"}">
+                <div class="shell-grid">
+
+                  <header class="title-bar">
+                    <button class="game-icon-btn hover-tip" data-hover-tip="Game info" data-info>${svg("safe")}</button>
+                    <div class="title-name">${GAME_NAME}</div>
+                    <button class="fair-play-btn" data-fair-play>${svg("safe")} Fair Play</button>
+                  </header>
+
+                  <aside class="sidebar">
+                    <div class="mode-tabs">
+                      <button class="mode-tab ${state.mode === "manual" ? "active" : ""}" data-mode="manual">Manual</button>
+                      <button class="mode-tab ${state.mode === "auto" ? "active" : ""}" data-mode="auto">Auto</button>
+                    </div>
+
+                    <div class="field-label">Bet Amount</div>
+                    <div class="bet-input-row">
+                      <span class="prefix">$</span>
+                      <input type="text" inputmode="decimal" placeholder="0.00" value="${state.betAmount}" data-bet-input class="${(insufficientBalance || belowMinBet) ? "error" : ""}" ${state.active ? "disabled" : ""}>
+                      <div class="bet-quick">
+                        <button data-half ${state.active ? "disabled" : ""}>½</button>
+                        <button data-double-bet ${state.active ? "disabled" : ""}>2×</button>
+                      </div>
+                    </div>
+                    ${insufficientBalance ? `<div class="balance-error">Insufficient balance</div>` : (belowMinBet ? `<div class="balance-error">Minimum bet is $0.10</div>` : "")}
+
+                    <div class="field-label" style="margin-top:14px;">Moles</div>
+                    ${molesCountRowHTML()}
+
+                    <div class="profit-box">
+                      <div class="profit-box-top">
+                        <div class="profit-box-col left"><span>Current Profit</span><strong>${Shell.fmtMoney(currentProfit)}</strong></div>
+                        <div class="profit-box-chevron">›</div>
+                        <div class="profit-box-col right"><span>Next</span><strong>${Shell.fmtMoney(Math.max(0, nextProfit))}</strong></div>
+                      </div>
+                      <div class="profit-box-bottom"><span class="cur">${state.active && state.level >= 1 ? currentMult.toFixed(2) : "0"}x</span><span class="divider">|</span><span class="nxt">${nextMult.toFixed(2)}x</span></div>
+                    </div>
+
+                    ${!state.active ? `
+                    <button class="place-bet-btn ${hasBet ? "" : "demo"}" data-place ${(insufficientBalance || belowMinBet) ? "disabled" : ""} style="margin-top:12px;">
+                      ${hasBet ? "Place Bet" : "Place Demo Bet"}
+                    </button>
+                    ${demoMode ? `<div class="demo-hint-wrap"><div class="demo-hint">Enter Bet Amount For Real Play</div></div>` : ""}` : `
+                    <button class="moles-pickrandom-btn" data-pick-random ${canPickRandom ? "" : "disabled"}>Pick Random</button>
+                    <button class="moles-cashout-btn" data-cashout ${canCashOut ? "" : "disabled"}>
+                      Cash Out ${state.level >= 1 ? `— ${Shell.fmtMoney(state.betAmt * currentMult)}` : ""}
+                    </button>`}
+
+                    <div class="sidebar-meta">
+                      <div class="sidebar-meta-row"><span>Balance</span><strong>${Shell.fmtMoney(balance)}</strong></div>
+                      ${state.active ? `<div class="sidebar-meta-row"><span>Moles found</span><strong>${state.level} / ${state.risk}</strong></div>` : ""}
+                    </div>
+                  </aside>
+
+                  <section class="game-box moles-stage">
+                    ${boardHTML()}
+                    ${r && state.showResultOverlay ? resultOverlayHTML(r) : ""}
+                  </section>
+
+                  <footer class="bottom-bar">
+                    <div class="bottom-icons">
+                      <div style="position:relative;">
+                        <button class="bottom-icon-btn ${state.settingsOpen ? "active" : ""}" data-settings-toggle title="Settings">${svg("settings")}</button>
+                        ${state.settingsOpen ? `
+                        <div class="popover" data-settings-popover>
+                          <div class="popover-title">Game Settings</div>
+                          <div class="popover-row"><span>Animations</span><button class="switch ${state.settings.animations ? "on" : ""}" data-toggle-setting="animations" ${Shell.isAnimationsDisabled() ? "disabled" : ""}></button></div>
+                          <div class="volume-row"><span>Volume — ${state.settings.volume}%</span><input type="range" min="0" max="100" value="${state.settings.volume}" data-volume-slider></div>
+                        </div>` : ""}
+                      </div>
+                      <button class="bottom-icon-btn ${state.favorite ? "fav-on" : ""}" data-fav-toggle title="Favorite">${svg("heart")}</button>
+                      <button class="bottom-icon-btn ${state.statsOpen ? "active" : ""}" data-stats-toggle title="Live stats">${svg("activity")}</button>
+                    </div>
+                    <div class="bottom-logo">Neon Jackpot</div>
+                  </footer>
+                </div>
+
+                ${Shell.statsPanelHTML(state, GAME_ID, GAME_NAME)}
+              </div>
+            </div>
+
+            ${state.infoOpen ? `
+            <div class="modal-overlay" data-info-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>${GAME_NAME}</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Pick how many moles are hiding among the 7 holes, then place your bet — the
+                moles are hidden the moment the round starts. Click a hole (or hit Pick Random)
+                to check it. Find a mole and your multiplier climbs; find every mole and you're
+                cashed out automatically. Hit an empty hole and the round ends. You can cash out
+                any time after your first hit. Fewer moles selected means a harder find but a
+                much bigger payout per hit; more moles means an easier find with steadier,
+                smaller growth.</p>
+              </div>
+            </div>` : ""}
+
+            ${state.fairPlayOpen ? `
+            <div class="modal-overlay" data-fair-play-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>${svg("safe")} Fair Play</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Your selected mole count is placed among the 7 holes with an independent,
+                uniformly random draw the instant you place your bet. Multipliers grow by a
+                factor of 7 ÷ (moles selected) per hit, scaled to keep a consistent return to
+                player, and are capped at a maximum for each mole count, auto-cashing you out
+                the moment that count's cap is reached (1 mole: ${MAX_MULT_BY_RISK[1].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}×,
+                2: ${MAX_MULT_BY_RISK[2].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}×,
+                3: ${MAX_MULT_BY_RISK[3].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}×,
+                4: ${MAX_MULT_BY_RISK[4].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}×,
+                5: ${MAX_MULT_BY_RISK[5].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}×,
+                6: ${MAX_MULT_BY_RISK[6].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}×).</p>
+              </div>
+            </div>` : ""}
+          `;
+
+          bind();
+        }
+
+        function refocus(sel) {
+          const el = document.querySelector(sel);
+          if (el) { el.focus(); const v = el.value; el.value = ""; el.value = v; }
+        }
+
+        function bind() {
+          if (state.showResultOverlay) {
+            document.querySelector(".sidebar")?.addEventListener("click", dismissResultOverlay);
+            document.querySelector("[data-result-overlay]")?.addEventListener("click", dismissResultOverlay);
+          }
+
+          document.querySelectorAll("[data-mode]").forEach((btn) => btn.addEventListener("click", () => {
+            if (btn.dataset.mode === "auto") { Shell.notify("Auto betting isn't available in this demo yet."); return; }
+            state.mode = btn.dataset.mode;
+            render();
+          }));
+
+          document.querySelector("[data-place]")?.addEventListener("click", startRound);
+          document.querySelector("[data-cashout]")?.addEventListener("click", () => cashOut(false));
+          document.querySelector("[data-pick-random]")?.addEventListener("click", pickRandomHole);
+
+          const betInput = document.querySelector("[data-bet-input]");
+          betInput?.addEventListener("input", (e) => {
+            state.betAmount = e.target.value.replace(/[^0-9.]/g, "");
+            render();
+            refocus("[data-bet-input]");
+          });
+          document.querySelector("[data-half]")?.addEventListener("click", () => {
+            const b = parseFloat(state.betAmount) || 0;
+            state.betAmount = (b / 2).toFixed(2);
+            render();
+          });
+          document.querySelector("[data-double-bet]")?.addEventListener("click", () => {
+            const b = parseFloat(state.betAmount) || 0;
+            state.betAmount = Math.min(b * 2 || 0, Shell.getBalance()).toFixed(2);
+            render();
+          });
+
+          const riskSliderEl = document.querySelector("[data-risk-slider]");
+          riskSliderEl?.addEventListener("input", (e) => {
+            if (state.active) return;
+            state.risk = parseInt(e.target.value, 10);
+            // update in place while dragging so the slider doesn't get torn down mid-drag
+            const row = e.target.closest(".moles-count-row");
+            const label = row?.querySelector(".moles-count-label strong");
+            if (label) label.textContent = state.risk;
+            e.target.style.setProperty("--fill", `${((state.risk - 1) / 5) * 100}%`);
+          });
+          riskSliderEl?.addEventListener("change", () => {
+            if (state.active) return;
+            render();
+          });
+
+          document.querySelectorAll("[data-moles-hole]").forEach((el) => {
+            el.addEventListener("click", () => {
+              const hammerEl = el.querySelector(".mole-hammer");
+              if (hammerEl) {
+                hammerEl.classList.remove("swing");
+                void hammerEl.offsetWidth; // restart the animation if it's mid-swing
+                hammerEl.classList.add("swing");
+              }
+              pickHole(parseInt(el.dataset.molesHole, 10));
+            });
+          });
+
+          document.querySelector("[data-info]")?.addEventListener("click", () => { state.infoOpen = true; render(); });
+          document.querySelector("[data-fair-play]")?.addEventListener("click", () => { state.fairPlayOpen = true; render(); });
+          document.querySelectorAll("[data-modal-close]").forEach((btn) => btn.onclick = () => { state.infoOpen = false; state.fairPlayOpen = false; render(); });
+          document.querySelector("[data-info-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.infoOpen = false; render(); } });
+          document.querySelector("[data-fair-play-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.fairPlayOpen = false; render(); } });
+
+          document.querySelector("[data-settings-toggle]")?.addEventListener("click", () => { state.settingsOpen = !state.settingsOpen; render(); });
+          document.querySelector("[data-toggle-setting]")?.addEventListener("click", (e) => {
+            const key = e.currentTarget.dataset.toggleSetting;
+            state.settings[key] = !state.settings[key];
+            render();
+          });
+          document.querySelector("[data-volume-slider]")?.addEventListener("input", (e) => { state.settings.volume = parseInt(e.target.value, 10); });
+
+          document.querySelector("[data-fav-toggle]")?.addEventListener("click", () => {
+            Shell.toggleFavorite(GAME_ID);
+            state.favorite = Shell.getFavorites().includes(GAME_ID);
+            render();
+          });
+
+          document.querySelector("[data-stats-toggle]")?.addEventListener("click", () => { state.statsOpen = !state.statsOpen; render(); });
+          Shell.bindStatsPanel(state, render);
+
+          document.addEventListener("click", (e) => {
+            if (state.settingsOpen && !e.target.closest("[data-settings-popover]") && !e.target.closest("[data-settings-toggle]")) {
+              state.settingsOpen = false; render();
+            }
+          }, { once: true });
+        }
+
+        Shell.attachStatsPanelDrag(state, render);
+
+        // Restore a round left in progress (e.g. accidental navigation away).
+        (function restoreRound() {
+          const saved = Shell.loadActiveRound(GAME_ID);
+          if (!saved) return;
+          state.risk = saved.risk;
+          state.betAmt = saved.betAmt;
+          state.level = saved.level;
+          state.currentMoles = new Set(saved.currentMoles && saved.currentMoles.length ? saved.currentMoles : Array.from(buildMoleSet(saved.risk)));
+          state.revealSet = null;
+          state.missIdx = null;
+          state.hitIdx = null;
+          state.hitMult = null;
+          state.lastResult = null;
+          state.showResultOverlay = false;
+        })();
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

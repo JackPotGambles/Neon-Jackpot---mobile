@@ -1,0 +1,1345 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Neon Jackpot fictional arcade demo — Case Battles" />
+    <title>Case Battles · Neon Jackpot</title>
+    <link rel="stylesheet" href="./shell.css" />
+    <style>
+      .content { max-width: 1180px; margin: auto; padding: 34px 32px 60px; }
+      .eyebrow { display: flex; align-items: center; gap: 8px; color: #ff5c9f; font-family: var(--mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; }
+      .eyebrow i { width: 25px; height: 1px; background: #ff5c9f; }
+      h1 { margin: 10px 0 0; font-size: clamp(24px, 3vw, 34px); font-weight: 800; letter-spacing: -.05em; line-height: 1; }
+      h1 em { color: var(--mint); font-style: normal; }
+      .cb-intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
+      .cb-intro p { max-width: 480px; margin: 12px 0 0; color: #8791a6; font-size: 12px; line-height: 1.6; }
+      .cb-intro-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+      .cb-create-btn { display: flex; align-items: center; gap: 8px; padding: 13px 20px; color: #04140f; background: linear-gradient(120deg, #38d787, #63f0ab); border: 0; border-radius: 12px; font-size: 12.5px; font-weight: 800; box-shadow: 0 10px 26px rgba(56,215,135,.28); white-space: nowrap; }
+      .cb-odds-btn { display: flex; align-items: center; gap: 8px; padding: 13px 18px; color: #cdd4e2; background: #171c2c; border: 1px solid var(--line); border-radius: 12px; font-size: 12.5px; font-weight: 800; white-space: nowrap; }
+      .cb-odds-btn:hover { border-color: rgba(92,255,231,.35); color: var(--mint); }
+
+      /* ===================== LOBBY LIST ===================== */
+      .cb-lobby-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+      .cb-lobby-card { display: flex; flex-direction: column; gap: 12px; padding: 18px; background: #121522; border: 1px solid var(--line); border-radius: 16px; }
+      .cb-lobby-card.mine { border-color: rgba(92,255,231,.35); }
+      .cb-lobby-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+      .cb-lobby-value { display: flex; align-items: center; gap: 7px; color: #ffcf7d; font-family: var(--mono); font-size: 15px; font-weight: 800; }
+      .cb-lobby-value svg { width: 14px; height: 14px; }
+      .cb-lobby-mode { padding: 3px 8px; color: #8791a6; background: rgba(255,255,255,.05); border-radius: 999px; font-family: var(--mono); font-size: 8.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+      .cb-lobby-status { padding: 4px 9px; border-radius: 999px; font-family: var(--mono); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+      .cb-lobby-status.waiting { color: #ffcf7d; background: rgba(255,207,125,.12); }
+      .cb-lobby-status.live { color: var(--mint); background: rgba(92,255,231,.12); animation: cb-pulse 1.4s ease-in-out infinite; }
+      .cb-lobby-status.done { color: #8791a6; background: rgba(255,255,255,.05); }
+      @keyframes cb-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+      .cb-lobby-players { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+      .cb-lobby-player { display: flex; align-items: center; gap: 6px; min-width: 0; }
+      .cb-lobby-avatar { display: grid; place-items: center; width: 26px; height: 26px; flex: none; color: #04140f; border-radius: 8px; font-size: 10.5px; font-weight: 800; overflow: hidden; }
+      .cb-lobby-player-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 90px; font-size: 11.5px; font-weight: 700; }
+      .cb-lobby-player.team-red .cb-lobby-avatar { box-shadow: 0 0 0 2px rgba(255,92,92,.6); }
+      .cb-lobby-player.team-blue .cb-lobby-avatar { box-shadow: 0 0 0 2px rgba(58,160,255,.6); }
+      .cb-lobby-slot-empty { display: flex; align-items: center; gap: 6px; color: #55617a; font-size: 11px; font-weight: 700; }
+      .cb-lobby-cases-row { display: flex; flex-wrap: wrap; gap: 5px; }
+      .cb-lobby-case-chip { padding: 3px 8px; color: #b6bfd2; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 999px; font-family: var(--mono); font-size: 9.5px; font-weight: 700; }
+      .cb-lobby-actions { display: flex; gap: 8px; margin-top: 2px; }
+      .cb-lobby-btn { flex: 1; padding: 10px 0; border-radius: 9px; font-size: 11.5px; font-weight: 800; border: 0; }
+      .cb-lobby-btn.join { color: #04140f; background: var(--mint); }
+      .cb-lobby-btn.watch { color: #cdd4e2; background: #171c2c; border: 1px solid var(--line); }
+      .cb-lobby-btn.cancel { color: #ff8fb0; background: rgba(255,92,159,.08); border: 1px solid rgba(255,92,159,.3); }
+      .cb-lobby-btn:disabled { opacity: .5; cursor: not-allowed; }
+      .cb-lobby-empty { grid-column: 1 / -1; padding: 60px 20px; text-align: center; color: #69758c; font-size: 12.5px; background: #121522; border: 1px solid var(--line); border-radius: 16px; }
+
+      /* ===================== CREATE MODAL ===================== */
+      .cb-create-box { max-width: 640px; }
+      .cb-mode-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 14px; }
+      .cb-mode-tile { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 12px 8px; background: #171c2c; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; text-align: center; }
+      .cb-mode-tile.active { border-color: var(--mint); background: rgba(92,255,231,.08); }
+      .cb-mode-tile strong { font-size: 11.5px; font-weight: 800; }
+      .cb-mode-tile span { color: #8791a6; font-size: 9.5px; font-weight: 700; }
+      .cb-ffa-size-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 13px; margin-bottom: 14px; background: rgba(255,255,255,.03); border: 1px solid var(--line); border-radius: 10px; }
+      .cb-ffa-size-row span { color: #8791a6; font-size: 11.5px; font-weight: 700; }
+      .cb-ffa-size-stepper { display: flex; align-items: center; gap: 10px; }
+      .cb-ffa-size-stepper button { display: grid; place-items: center; width: 26px; height: 26px; color: #cdd4e2; background: #0c0e18; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; font-weight: 800; }
+      .cb-ffa-size-stepper button:disabled { opacity: .4; }
+      .cb-ffa-size-stepper strong { min-width: 16px; text-align: center; font-family: var(--mono); font-size: 13px; }
+      .cb-case-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 6px 0 16px; }
+      .cb-case-tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 10px; background: #171c2c; border: 1px solid var(--line); border-radius: 13px; cursor: pointer; text-align: center; }
+      .cb-case-tile:hover { border-color: rgba(92,255,231,.35); }
+      .cb-case-tile.has-count { border-color: var(--mint); background: rgba(92,255,231,.06); }
+      .cb-case-tile-icon { font-size: 26px; line-height: 1; }
+      .cb-case-tile-name { font-size: 11.5px; font-weight: 800; }
+      .cb-case-tile-cost { color: #8791a6; font-family: var(--mono); font-size: 10px; font-weight: 700; }
+      .cb-case-tile-stepper { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+      .cb-case-tile-stepper button { display: grid; place-items: center; width: 24px; height: 24px; color: #cdd4e2; background: #0c0e18; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; font-weight: 800; }
+      .cb-case-tile-stepper button:disabled { opacity: .4; }
+      .cb-case-tile-stepper strong { min-width: 18px; text-align: center; font-family: var(--mono); font-size: 12px; }
+
+      .cb-create-summary { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; margin-bottom: 14px; background: rgba(255,207,125,.06); border: 1px solid rgba(255,207,125,.25); border-radius: 12px; }
+      .cb-create-summary span { color: #8791a6; font-size: 11px; font-weight: 700; }
+      .cb-create-summary strong { color: #ffcf7d; font-family: var(--mono); font-size: 16px; }
+      .cb-create-error { margin-bottom: 12px; padding: 10px 13px; color: #ff8fb0; background: rgba(255,92,159,.08); border: 1px solid rgba(255,92,159,.3); border-radius: 10px; font-size: 11.5px; }
+
+      /* ===================== BATTLE ARENA ===================== */
+      .cb-arena-wrap { display: flex; flex-direction: column; gap: 18px; }
+      .cb-arena-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 20px; background: #121522; border: 1px solid var(--line); border-radius: 16px; flex-wrap: wrap; }
+      .cb-arena-pot { display: flex; align-items: center; gap: 8px; color: #ffcf7d; font-family: var(--mono); font-size: 20px; font-weight: 800; }
+      .cb-arena-pot svg { width: 17px; height: 17px; }
+      .cb-arena-pot small { color: #69758c; font-family: var(--mono); font-size: 10px; font-weight: 700; margin-left: 4px; }
+      .cb-arena-status-text { color: #8791a6; font-size: 12px; font-weight: 700; }
+      .cb-back-link { display: inline-flex; align-items: center; gap: 6px; color: #69758c; font-size: 11px; font-weight: 700; }
+      .cb-back-link:hover { color: var(--mint); }
+      .cb-back-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; color: #04140f; background: linear-gradient(120deg, var(--mint), #7ad9ff); border: 0; border-radius: 12px; font-size: 12.5px; font-weight: 800; box-shadow: 0 10px 26px rgba(92,255,231,.22); }
+      .cb-back-btn:hover { filter: brightness(1.05); }
+
+      .cb-vs-grid { display: grid; gap: 14px; grid-template-columns: repeat(2, 1fr); }
+      .cb-vs-grid.seats-3, .cb-vs-grid.seats-5 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+      .cb-vs-grid.seats-6 { grid-template-columns: repeat(3, 1fr); }
+      @media (max-width: 900px) { .cb-vs-grid { grid-template-columns: 1fr !important; } }
+
+      .cb-player-panel { display: flex; flex-direction: column; padding: 18px; background: #121522; border: 1px solid var(--line); border-radius: 18px; transition: border-color .25s ease, box-shadow .25s ease; }
+      .cb-player-panel.winner { border-color: rgba(92,255,231,.55); box-shadow: 0 0 34px rgba(92,255,231,.18); }
+      .cb-player-panel.loser { opacity: .72; }
+      .cb-player-panel.team-red { border-top: 3px solid #ff5c5c; }
+      .cb-player-panel.team-blue { border-top: 3px solid #3aa0ff; }
+      .cb-player-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+      .cb-player-avatar { display: grid; place-items: center; width: 38px; height: 38px; flex: none; color: #04140f; border-radius: 10px; font-size: 13px; font-weight: 800; overflow: hidden; }
+      .cb-player-name { font-size: 13.5px; font-weight: 800; }
+      .cb-player-team-tag { padding: 2px 7px; border-radius: 999px; font-family: var(--mono); font-size: 8.5px; font-weight: 800; text-transform: uppercase; }
+      .cb-player-team-tag.red { color: #ff8f8f; background: rgba(255,92,92,.12); }
+      .cb-player-team-tag.blue { color: #7ac0ff; background: rgba(58,160,255,.12); }
+      .cb-player-total { margin-left: auto; text-align: right; }
+      .cb-player-total strong { display: block; font-family: var(--mono); font-size: 16px; color: var(--mint); }
+      .cb-player-total span { color: #69758c; font-family: var(--mono); font-size: 9px; text-transform: uppercase; }
+
+      .cb-team-header { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 0; font-family: var(--mono); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+      .cb-team-header.red { color: #ff8f8f; }
+      .cb-team-header.blue { color: #7ac0ff; }
+      .cb-team-block { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 18px; }
+      .cb-team-block.red { background: rgba(255,92,92,.05); border: 1px solid rgba(255,92,92,.2); }
+      .cb-team-block.blue { background: rgba(58,160,255,.05); border: 1px solid rgba(58,160,255,.2); }
+      .cb-team-block.winner { box-shadow: 0 0 34px rgba(92,255,231,.18); }
+      .cb-team-total { text-align: center; font-family: var(--mono); font-size: 13px; color: #cdd4e2; font-weight: 700; }
+      .cb-teams-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      @media (max-width: 820px) { .cb-teams-grid { grid-template-columns: 1fr; } }
+
+      .cb-reel-wrap { position: relative; height: 128px; margin-bottom: 10px; overflow: hidden; border-radius: 13px; background: linear-gradient(180deg, #0c0e18, #10131f); border: 1px solid var(--line); }
+      .cb-reel-marker { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: linear-gradient(180deg, transparent, #ffcf7d, transparent); z-index: 5; box-shadow: 0 0 12px rgba(255,207,125,.8); }
+      .cb-reel-fade { position: absolute; top: 0; bottom: 0; width: 60px; z-index: 4; pointer-events: none; }
+      .cb-reel-fade.left { left: 0; background: linear-gradient(90deg, #0c0e18, transparent); }
+      .cb-reel-fade.right { right: 0; background: linear-gradient(270deg, #0c0e18, transparent); }
+      .cb-reel-track { position: absolute; top: 0; left: 50%; height: 100%; display: flex; align-items: center; gap: 8px; padding: 0 8px; will-change: transform; transition: transform 4.4s cubic-bezier(.1,.7,.15,1); }
+      .cb-item { position: relative; flex: 0 0 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 100px; border-radius: 11px; background: linear-gradient(160deg, rgba(255,255,255,.05), rgba(255,255,255,.01)); border: 1px solid var(--line); }
+      .cb-item-icon { font-size: 26px; line-height: 1; }
+      .cb-item-name { font-size: 8px; font-weight: 800; text-align: center; }
+      .cb-item-amt { font-family: var(--mono); font-size: 8.5px; color: #8791a6; }
+      .cb-item.tier-common { border-color: var(--line); }
+      .cb-item.tier-uncommon { border-color: rgba(92,214,120,.45); }
+      .cb-item.tier-rare { border-color: rgba(58,160,255,.45); }
+      .cb-item.tier-epic { border-color: rgba(178,102,255,.5); }
+      .cb-item.tier-legendary { border-color: rgba(255,207,125,.6); box-shadow: 0 0 16px rgba(255,207,125,.16); }
+      .cb-item.tier-exotic { border-color: rgba(255,92,159,.65); box-shadow: 0 0 18px rgba(255,92,159,.2); }
+      .cb-item.winner-slot { animation: cb-winner-pulse .9s ease .05s 2; }
+      @keyframes cb-winner-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+
+      .cb-case-progress { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-family: var(--mono); font-size: 10px; color: #69758c; }
+      .cb-pulled-row { display: flex; flex-wrap: wrap; gap: 5px; }
+      .cb-pulled-chip { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,.03); border: 1px solid var(--line); font-family: var(--mono); font-size: 9.5px; font-weight: 700; color: #b6bfd2; opacity: 0; animation: cb-chip-in .22s ease forwards; }
+      @keyframes cb-chip-in { to { opacity: 1; } }
+      .cb-pulled-chip.tier-legendary, .cb-pulled-chip.tier-exotic { color: #ffcf7d; }
+
+      .cb-result-banner { margin-top: 16px; padding: 18px; text-align: center; border-radius: 14px; background: rgba(255,255,255,.02); border: 1px solid var(--line); }
+      .cb-result-banner.win { background: rgba(92,255,231,.06); border-color: rgba(92,255,231,.3); }
+      .cb-result-title { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
+      .cb-result-sub { color: #8791a6; font-size: 11.5px; }
+      .cb-result-amount { margin-top: 8px; font-family: var(--mono); font-size: 22px; font-weight: 800; color: var(--mint); }
+      .cb-result-actions { display: flex; gap: 10px; justify-content: center; margin-top: 16px; }
+
+      .cb-waiting-panel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 50px 24px; text-align: center; }
+      .cb-waiting-spin { width: 34px; height: 34px; border: 3px solid rgba(92,255,231,.18); border-top-color: var(--mint); border-radius: 50%; animation: cb-spin 1s linear infinite; }
+      @keyframes cb-spin { to { transform: rotate(360deg); } }
+
+      .cb-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 14px; margin-top: 4px; }
+      .cb-legend-item { display: flex; align-items: center; gap: 6px; color: #8791a6; font-size: 10.5px; font-weight: 700; }
+      .cb-legend-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+
+      /* ===================== RARITY ODDS MODAL ===================== */
+      .cb-odds-box { max-width: 620px; max-height: 82vh; overflow-y: auto; }
+      .cb-odds-tier { padding: 14px; margin-bottom: 12px; background: #171c2c; border: 1px solid var(--line); border-radius: 13px; }
+      .cb-odds-tier-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12.5px; font-weight: 800; }
+      .cb-odds-tier-head span { color: #69758c; font-family: var(--mono); font-size: 10.5px; font-weight: 700; }
+      .cb-odds-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid rgba(255,255,255,.04); font-size: 11.5px; }
+      .cb-odds-row:first-of-type { border-top: 0; }
+      .cb-odds-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+      .cb-odds-label { min-width: 78px; font-weight: 800; }
+      .cb-odds-icons { flex: 1; color: #8791a6; font-size: 13px; letter-spacing: 2px; }
+      .cb-odds-pct { font-family: var(--mono); color: #cdd4e2; font-weight: 700; min-width: 46px; text-align: right; }
+      .cb-odds-note { margin-top: 4px; color: #69758c; font-size: 10.5px; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <div class="site-shell">
+      <div class="site-grid">
+        <div id="site-sidebar"></div>
+        <div id="site-topbar"></div>
+        <div id="page-content"></div>
+      </div>
+    </div>
+    <script src="./promo-vault.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="./chat.js"></script>
+    <script src="./shell.js"></script>
+    <script src="./games.js"></script>
+    <script>
+      (() => {
+        Shell.mount({ activeTab: "Games" });
+        Chat.mount();
+        const content = document.getElementById("page-content");
+        const svg = Shell.svg;
+
+        // =====================================================================
+        // FIREBASE — reuse the same project chat.js already connects to. We
+        // wait for chat.js's own init (it exposes no promise, so we poll for
+        // `firebase.apps.length` briefly) rather than re-configuring here.
+        // =====================================================================
+        let db = null;
+        // Firebase gives every client the live difference between the SERVER's
+        // clock and this device's own clock at /.info/serverTimeOffset. A
+        // player's system clock can be wrong by seconds or more (wrong
+        // timezone/DST handling, no time sync, manually set, etc.) — when that
+        // happens, comparing this device's raw Date.now() against a
+        // ServerValue.TIMESTAMP written by a DIFFERENT device produces a
+        // meaningless gap. One player saw their reveal silently "scheduled" for
+        // ~14 seconds in the future and just sat frozen until real time caught
+        // up to their clock's error. serverNow() below corrects for this by
+        // adding the offset, so every client's notion of "now" agrees with the
+        // server (and each other) regardless of whose system clock is off.
+        let serverTimeOffsetMs = 0;
+        function serverNow() { return Date.now() + serverTimeOffsetMs; }
+        function watchServerTimeOffset() {
+          try {
+            db.ref(".info/serverTimeOffset").on("value", (snap) => {
+              const v = snap.val();
+              if (typeof v === "number") serverTimeOffsetMs = v;
+            });
+          } catch (e) {}
+        }
+        function tryInitDb(cb, attemptsLeft) {
+          if (typeof firebase !== "undefined" && firebase.apps && firebase.apps.length) {
+            db = firebase.database();
+            watchServerTimeOffset();
+            cb(true);
+            return;
+          }
+          if (attemptsLeft <= 0) { cb(false); return; }
+          setTimeout(() => tryInitDb(cb, attemptsLeft - 1), 200);
+        }
+
+        // =====================================================================
+        // ITEM POOL — emoji items, 6 rarities. Each case tier rolls from this
+        // same pool but with different weightings (cheaper cases lean common,
+        // pricier cases meaningfully shift odds toward the good stuff), and
+        // each rarity's dollar value scales with the case tier's own value
+        // band so a Legendary pull from a cheap case isn't worth as much as
+        // a Legendary pull from an expensive one.
+        // =====================================================================
+        const RARITIES = [
+          { key: "common",    label: "Common",    color: "#8791a6", weight: 46 },
+          { key: "uncommon",  label: "Uncommon",  color: "#5cd678", weight: 27 },
+          { key: "rare",      label: "Rare",      color: "#3aa0ff", weight: 16 },
+          { key: "epic",      label: "Epic",      color: "#b266ff", weight: 7.5 },
+          { key: "legendary", label: "Legendary", color: "#ffcf7d", weight: 2.7 },
+          { key: "exotic",    label: "Exotic",    color: "#ff5c9f", weight: 0.8 },
+        ];
+        const ITEM_ICONS = {
+          common: ["🪙", "🥄", "🔩", "🧦", "🪀"],
+          uncommon: ["💵", "🎲", "🧩", "🪩", "🎯"],
+          rare: ["💎", "🔮", "🗝️", "⚙️", "🧿"],
+          epic: ["👑", "🏆", "🛡️", "⚔️", "🔱"],
+          legendary: ["🌟", "🐉", "🦄", "☄️"],
+          exotic: ["👽", "🛸", "💠", "🔆"],
+        };
+        // Each rarity's payout is expressed as a MULTIPLE of the case's own cost —
+        // e.g. a common pull returns roughly 15-45% of what the case cost, an exotic
+        // pull can return 8-16x. This is what keeps a $5,000 case's Legendary pull
+        // worth far more than a $5 case's Legendary pull, without a separate table
+        // per case tier.
+        const RARITY_MULT = {
+          common:    [0.15, 0.45],
+          uncommon:  [0.45, 0.90],
+          rare:      [0.90, 1.6],
+          epic:      [1.6, 3.2],
+          legendary: [3.2, 6.5],
+          exotic:    [6.5, 16],
+        };
+
+        // =====================================================================
+        // CASE TIERS — 5 cases, A (cheap) through E (expensive). Higher tiers
+        // get a modest boost to good-rarity weight on top of the base RARITIES
+        // table, so pricier cases "feel" better (more legendary/exotic hits)
+        // without being risk-free.
+        // =====================================================================
+        const CASE_TIERS = [
+          { key: "A", name: "Case A", icon: "📦", cost: 5,    boost: 0 },
+          { key: "B", name: "Case B", icon: "🎁", cost: 25,   boost: 0.4 },
+          { key: "C", name: "Case C", icon: "🧨", cost: 100,  boost: 0.9 },
+          { key: "D", name: "Case D", icon: "💼", cost: 750,  boost: 1.6 },
+          { key: "E", name: "Case E", icon: "👑", cost: 5000, boost: 2.6 },
+        ];
+        const MAX_CASES_PER_PLAYER = 20;
+
+        function weightedRaritiesFor(caseTier) {
+          // boost shifts weight mass from common/uncommon toward epic/legendary/exotic,
+          // scaled by `boost` — higher-tier cases get progressively better odds of
+          // landing a good rarity. Note: this changes the ODDS of each rarity, not
+          // the dollar payouts directly — see CASE_EV_NORM below for why that matters.
+          return RARITIES.map((r) => {
+            let w = r.weight;
+            if (caseTier.boost > 0) {
+              if (r.key === "common") w = w / (1 + caseTier.boost * 0.55);
+              else if (r.key === "uncommon") w = w / (1 + caseTier.boost * 0.25);
+              else if (r.key === "epic") w = w * (1 + caseTier.boost * 0.6);
+              else if (r.key === "legendary") w = w * (1 + caseTier.boost * 1.1);
+              else if (r.key === "exotic") w = w * (1 + caseTier.boost * 1.4);
+            }
+            return { ...r, w };
+          });
+        }
+
+        // =====================================================================
+        // EV NORMALIZATION — payouts are now based on ACTUAL pulled totals
+        // (see finishReveal below), not a fixed 2x-stake pot. That means the
+        // house's economics depend entirely on the average dollar value a case
+        // pays out relative to what it cost. Shifting odds toward legendary/exotic
+        // on higher tiers (the `boost` above) also shifts the AVERAGE payout up —
+        // on Case E, boost pushed the average pull to ~207% of the case's cost,
+        // which meant two friends trading wins back and forth would extract money
+        // from the house on every single battle in expectation, no skill required.
+        //
+        // To close that off, every tier's dollar payouts are rescaled so the
+        // average pull is pinned to the SAME target (90% of the case's cost —
+        // a 10% house edge) no matter how the odds are weighted. Pricier cases
+        // still swing harder (bigger gap between a common pull and an exotic
+        // pull) since that's driven by odds, but the average outcome per case
+        // never crosses break-even, so a battle's expected combined payout is
+        // always a bit less than what both players staked.
+        // =====================================================================
+        const TARGET_CASE_EV = 0.90; // 90% RTP per case pull, applied uniformly across tiers
+        const CASE_EV_NORM = {};
+        CASE_TIERS.forEach((tier) => {
+          const weighted = weightedRaritiesFor(tier);
+          const totalW = weighted.reduce((s, r) => s + r.w, 0);
+          const rawEV = weighted.reduce((s, r) => {
+            const [lo, hi] = RARITY_MULT[r.key];
+            return s + (r.w / totalW) * ((lo + hi) / 2);
+          }, 0);
+          CASE_EV_NORM[tier.key] = rawEV > 0 ? (TARGET_CASE_EV / rawEV) : 1;
+        });
+
+        // Deterministic-ish "roll a case" — used both when generating the battle's
+        // pre-agreed result set (see buildResultsForCaseList) and for idle reel filler.
+        function rollCaseItem(caseTier) {
+          const weighted = weightedRaritiesFor(caseTier);
+          const total = weighted.reduce((s, r) => s + r.w, 0);
+          let roll = Math.random() * total;
+          let picked = weighted[0];
+          for (const r of weighted) {
+            if (roll < r.w) { picked = r; break; }
+            roll -= r.w;
+          }
+          const icons = ITEM_ICONS[picked.key];
+          const icon = icons[Math.floor(Math.random() * icons.length)];
+          const [lo, hi] = RARITY_MULT[picked.key];
+          const mult = lo + Math.random() * (hi - lo);
+          const norm = CASE_EV_NORM[caseTier.key] || 1;
+          const amount = Math.round(caseTier.cost * mult * norm * 100) / 100;
+          return { rarityKey: picked.key, icon, amount, caseKey: caseTier.key };
+        }
+
+        function randomFillerItem() {
+          const tier = CASE_TIERS[Math.floor(Math.random() * CASE_TIERS.length)];
+          return rollCaseItem(tier);
+        }
+
+        // =====================================================================
+        // MODES — 1v1 (classic, 2 seats), 2v2 (4 seats, fixed red/blue teams,
+        // team totals combined), and Free For All (3-6 seats, chosen by the
+        // creator, everyone for themselves — top individual puller takes the pot).
+        // =====================================================================
+        const MODES = {
+          "1v1": { label: "1v1", desc: "2 players", seats: 2, teams: false },
+          "2v2":  { label: "2v2 Teams", desc: "4 players", seats: 4, teams: true },
+          "ffa":  { label: "Free For All", desc: "3–6 players", seats: null, teams: false },
+        };
+        const FFA_MIN = 3, FFA_MAX = 6;
+        function seatsForBattle(b) {
+          return b.mode === "ffa" ? (b.maxPlayers || FFA_MIN) : (MODES[b.mode] || MODES["1v1"]).seats;
+        }
+        function teamForSeat(mode, seatIdx) {
+          if (mode !== "2v2") return null;
+          return seatIdx < 2 ? "red" : "blue";
+        }
+
+        // =====================================================================
+        // STATE
+        // =====================================================================
+        const params = new URLSearchParams(location.search);
+        const state = {
+          view: params.get("battle") ? "arena" : "lobby", // "lobby" | "arena"
+          battleId: params.get("battle") || null,
+          lobbies: {},           // live snapshot of battles/* from Firebase
+          createSelection: {},   // { caseKey: count }
+          createMode: "1v1",
+          createFfaSize: 4,
+          createError: "",
+          arenaBattle: null,     // live snapshot of the current battle
+          arenaUnsub: null,
+          spinning: false,       // true while THIS client is animating the synced reveal
+          revealedIndex: {},     // how many case results have been revealed per seat so far
+          settledLocally: false, // guards against re-running payout/animation once already handled
+          debitedBattles: {},    // battleId -> true, guards against double-deducting our own stake locally
+          revealStartedFor: null, // battleId this client has already kicked off startSyncedReveal() for — prevents both missed starts and duplicate starts
+          arenaRenderedFor: null, // battleId whose arena DOM is currently built — guards against a mid-reveal Firebase snapshot (e.g. our own debited/{seat} write) triggering a full innerHTML rebuild that would kill the in-progress reel animation
+          joiningInFlight: {}, // battleId -> true while OUR OWN joinBattle() transaction for that battle hasn't resolved yet — stops the lobby-list listener's auto-open from racing against joinBattle's own openBattle() call
+        };
+
+        function myId() { return Shell.getPlayerProfile().id; }
+        function myName() { return Shell.getPlayerProfile().name; }
+        function myColor() { return Shell.getPlayerProfile().avatarColor || "#5cffe7"; }
+
+        function totalCasesSelected() {
+          return Object.values(state.createSelection).reduce((s, n) => s + n, 0);
+        }
+        function totalCostSelected() {
+          return Object.entries(state.createSelection).reduce((s, [key, n]) => {
+            const tier = CASE_TIERS.find((c) => c.key === key);
+            return s + (tier ? tier.cost * n : 0);
+          }, 0);
+        }
+        function selectedCaseKeysExpanded() {
+          const list = [];
+          Object.entries(state.createSelection).forEach(([key, n]) => {
+            for (let i = 0; i < n; i++) list.push(key);
+          });
+          return list;
+        }
+
+        // =====================================================================
+        // BATTLE RESULT GENERATION — the client that fills the LAST open seat
+        // rolls every item for every seat at once and writes that fixed result
+        // set to Firebase. Every client then just animates toward those exact
+        // pre-rolled values — this is what guarantees everyone sees literally
+        // the same pulls, since there's a single source of truth instead of
+        // independent RNGs per browser.
+        // =====================================================================
+        function buildResultsForCaseList(caseKeys) {
+          return caseKeys.map((key) => {
+            const tier = CASE_TIERS.find((c) => c.key === key);
+            return rollCaseItem(tier);
+          });
+        }
+
+        // =====================================================================
+        // FIRESTORE-ish helpers (Firebase RTDB)
+        // =====================================================================
+        function battlesRef() { return db.ref("caseBattles"); }
+        function battleRef(id) { return db.ref("caseBattles/" + id); }
+
+        function seatList(battle) {
+          // players is stored as an object keyed "0","1",... — normalize to an
+          // ordered array of { seat, ...player } for whichever seats are filled.
+          const players = battle.players || {};
+          return Object.keys(players).map((k) => parseInt(k, 10)).sort((a, b) => a - b)
+            .map((seat) => ({ seat, ...players[seat] }));
+        }
+
+        function mySeat(battle) {
+          const seats = seatList(battle);
+          const mine = seats.find((s) => s.id === myId());
+          return mine ? mine.seat : -1;
+        }
+
+        function createBattle() {
+          state.createError = "";
+          const caseKeys = selectedCaseKeysExpanded();
+          if (!caseKeys.length) { state.createError = "Pick at least one case."; renderCreateModalOnly(); return; }
+          if (caseKeys.length > MAX_CASES_PER_PLAYER) { state.createError = `Max ${MAX_CASES_PER_PLAYER} cases per battle.`; renderCreateModalOnly(); return; }
+          const total = totalCostSelected();
+          if (total > Shell.getCashBalance()) { state.createError = "You don't have enough balance to cover this battle."; renderCreateModalOnly(); return; }
+          if (!db) { state.createError = "Chat/battle connection isn't ready yet — try again in a moment."; renderCreateModalOnly(); return; }
+
+          const mode = state.createMode;
+          const maxPlayers = mode === "ffa" ? state.createFfaSize : MODES[mode].seats;
+
+          const battle = {
+            createdAt: firebase.database.ServerValue.TIMESTAMP,
+            caseKeys,
+            totalValue: total, // stake PER PLAYER — the actual payout is based on real pulls, see finishReveal
+            status: "waiting", // waiting -> live -> done
+            hostId: myId(),
+            mode,
+            maxPlayers,
+            players: {
+              0: { id: myId(), name: myName(), color: myColor(), team: teamForSeat(mode, 0) },
+            },
+          };
+          const ref = battlesRef().push();
+          ref.set(battle).then(() => {
+            closeCreateModal();
+            state.createSelection = {};
+            openBattle(ref.key);
+          }).catch((err) => {
+            state.createError = "Couldn't create the battle: " + (err && err.message);
+            renderCreateModalOnly();
+          });
+        }
+
+        function cancelBattle(id) {
+          const b = state.lobbies[id];
+          if (!b || b.status !== "waiting" || b.hostId !== myId()) return;
+          battleRef(id).remove();
+        }
+
+        // Joining takes the next open seat. Money for THIS seat is deducted
+        // immediately once the seat is confirmed ours (see debitIfNeeded) — every
+        // other already-seated player (including the host) debits their own
+        // stake independently the moment they observe the battle flip to "live",
+        // which is what fixes the old bug where only the joiner ever paid in.
+        function joinBattle(id) {
+          const b = state.lobbies[id];
+          if (!b || b.status !== "waiting") return;
+          if (mySeat(b) >= 0) { openBattle(id); return; } // already seated (e.g. host re-opening)
+          const cost = b.totalValue || 0;
+          if (cost > Shell.getCashBalance()) { Shell.notify("Insufficient balance to join this battle."); return; }
+
+          state.joiningInFlight[id] = true;
+
+          let abortReason = null;
+
+          battleRef(id).transaction((cur) => {
+            if (!cur) { abortReason = "gone"; return; } // battle gone
+            if (cur.status !== "waiting") { abortReason = "not-waiting"; return; } // already live/done — abort
+            cur.players = cur.players || {};
+            const filled = Object.keys(cur.players).length;
+            if (filled >= seatsForBattle(cur)) { abortReason = "full"; return; } // already full — abort
+            if (Object.values(cur.players).some((p) => p.id === myId())) { abortReason = "already-seated"; return; } // already seated — abort
+            abortReason = null;
+            const seatIdx = filled; // next open seat, 0-indexed
+            cur.players[seatIdx] = { id: myId(), name: myName(), color: myColor(), team: teamForSeat(cur.mode, seatIdx) };
+            const nowFilled = filled + 1;
+            if (nowFilled >= seatsForBattle(cur)) {
+              cur.status = "live";
+              // Use Firebase's server-authoritative timestamp, NOT Date.now() —
+              // Date.now() here would be whichever client's clock happened to run
+              // this transaction (the joiner's), and every other client (the
+              // host, and any other seat) computes "how far into the reveal are
+              // we" using THEIR OWN local clock against this value. Any clock
+              // drift between devices, or even just normal network latency before
+              // a client's snapshot arrives, meant elapsedIntoSeries could already
+              // exceed the whole reveal's total duration by the time e.g. the host
+              // received the "live" snapshot — making startSyncedReveal() compute
+              // alreadyDoneCases >= total and jump straight to finishReveal(),
+              // skipping the animation for every case but the first. Server time
+              // is the same instant for everyone, closing that gap.
+              cur.startedAt = firebase.database.ServerValue.TIMESTAMP;
+              const results = {};
+              for (let i = 0; i < nowFilled; i++) results[i] = buildResultsForCaseList(cur.caseKeys);
+              cur.results = results;
+            }
+            return cur;
+          }, (err, committed, snap) => {
+            delete state.joiningInFlight[id];
+            if (err) { Shell.notify("Couldn't join that battle — try again."); return; }
+            if (!committed) {
+              if (abortReason === "already-seated") { openBattle(id); return; } // we're already in — just open it, not an error
+              if (abortReason === "full" || abortReason === "not-waiting") { Shell.notify("That battle just filled up — try another."); return; }
+              if (abortReason === "gone") { Shell.notify("That battle no longer exists — try another."); return; }
+              // committed:false with no abortReason set means our own update
+              // function never actually ran against real data (the stale-cache
+              // case) rather than a legitimate "someone else got there first".
+              // Re-run the join once against a fresh server read instead of
+              // showing a false "filled up" and leaving the player stuck.
+              battleRef(id).once("value").then((freshSnap) => {
+                const fresh = freshSnap.val();
+                if (fresh && fresh.status === "waiting" && Object.keys(fresh.players || {}).length < seatsForBattle(fresh)) {
+                  joinBattle(id);
+                } else {
+                  Shell.notify("That battle just filled up — try another.");
+                }
+              });
+              return;
+            }
+            const finalData = snap.val();
+            if (!finalData) { Shell.notify("That battle just filled up — try another."); return; }
+            debitIfNeeded(id, finalData);
+            openBattle(id, finalData);
+          }, false); // applyLocally: false — always check against the server, not local cache
+        }
+
+        // Deducts OUR OWN stake for a battle exactly once, the moment we can see
+        // (from Firebase) that the battle has gone live and we hold a seat in it.
+        // Uses a per-battle flag in Firebase (`debited/{seat}`) as the source of
+        // truth so a page refresh / reconnect never double-charges — only ever
+        // charges the seat that hasn't been marked debited yet, and every seat's
+        // own client is responsible for marking (and paying) its own seat.
+        function debitIfNeeded(id, battleData) {
+          if (!battleData || battleData.status === "waiting") return;
+          const seats = seatList(battleData);
+          const mine = seats.find((s) => s.id === myId());
+          if (!mine) return;
+          const already = battleData.debited && battleData.debited[mine.seat];
+          if (already) return;
+          if (state.debitedBattles[id + ":" + mine.seat]) return;
+          state.debitedBattles[id + ":" + mine.seat] = true;
+          Shell.addCashBalance(-(battleData.totalValue || 0));
+          battleRef(id).child("debited").child(String(mine.seat)).set(true);
+        }
+
+        function openBattle(id, knownData) {
+          state.battleId = id;
+          state.view = "arena";
+          state.spinning = false;
+          state.revealedIndex = {};
+          state.settledLocally = false;
+          state.revealStartedFor = null;
+          state.arenaRenderedFor = null;
+          // If the caller already has a confirmed, fresh snapshot (e.g. straight
+          // out of a just-committed join transaction), seed it immediately so the
+          // very first paint is correct — don't wait on the .on("value") listener
+          // below, whose first callback can race in with a stale cached copy.
+          if (knownData) state.arenaBattle = { id, ...knownData };
+          const url = new URL(location.href);
+          url.searchParams.set("battle", id);
+          history.replaceState(null, "", url.toString());
+          subscribeToArena(id);
+          render();
+        }
+
+        function backToLobby() {
+          if (state.arenaUnsub) { state.arenaUnsub(); state.arenaUnsub = null; }
+          state.view = "lobby";
+          state.battleId = null;
+          state.arenaBattle = null;
+          const url = new URL(location.href);
+          url.searchParams.delete("battle");
+          history.replaceState(null, "", url.toString());
+          render();
+        }
+
+        function subscribeToArena(id) {
+          if (state.arenaUnsub) { state.arenaUnsub(); state.arenaUnsub = null; }
+          const ref = battleRef(id);
+          const handler = (snap) => {
+            const data = snap.val();
+            // Guard against a stale/regressive snapshot clobbering state we've
+            // already confirmed is newer (e.g. the seed passed into openBattle()
+            // straight from a just-committed join transaction). Firebase can
+            // deliver a listener's first callback from local cache slightly
+            // behind the latest known truth; if that happens here we'd otherwise
+            // briefly (or permanently, if nothing re-fires) snap the arena back
+            // to a "waiting for a player" view even though we know our seat is
+            // already in. This lets us detect "this snapshot has fewer players
+            // than what we already know is true" and skip applying it.
+            if (data && state.arenaBattle && state.arenaBattle.id === id) {
+              const incomingSeats = Object.keys(data.players || {}).length;
+              const knownSeats = Object.keys(state.arenaBattle.players || {}).length;
+              if (incomingSeats < knownSeats) return; // stale snapshot — ignore, a fresher/consistent one will still arrive
+            }
+            state.arenaBattle = data ? { id, ...data } : null;
+            render();
+            if (data && data.status === "live") {
+              // Firebase's ServerValue.TIMESTAMP placeholder used for startedAt
+              // (see joinBattle's transaction) isn't resolved to a real number
+              // until the server confirms the write. A client's .on("value")
+              // listener can receive an EARLIER snapshot where startedAt is
+              // still that unresolved placeholder — if we let startSyncedReveal()
+              // run off that snapshot, it silently falls back to this client's
+              // own Date.now() as the start time (see startSyncedReveal below),
+              // and because revealStartedFor gets marked done right away, the
+              // TRUE resolved snapshot that arrives moments later is ignored.
+              // That mismatched, essentially-random fallback start time is what
+              // caused the reveal to sit doing nothing for several seconds
+              // before it "caught up" to itself and finally started animating.
+              // Waiting here for startedAt to actually be a number closes that
+              // gap — we simply don't start until we have the real synced clock.
+              if (state.revealStartedFor !== id && !state.settledLocally && typeof data.startedAt === "number") {
+                state.revealStartedFor = id;
+                startSyncedReveal();
+              } else if (state.revealStartedFor !== id && !state.settledLocally && data.status === "live") {
+                // startedAt hasn't resolved from the server yet on this
+                // particular snapshot — don't lock in revealStartedFor, just
+                // wait for the next snapshot (which will have it resolved).
+                // As a safety net in case no further snapshot ever arrives for
+                // some reason, re-check once directly against the server shortly
+                // after, so this can never get permanently stuck waiting.
+                setTimeout(() => {
+                  if (state.revealStartedFor === id || state.settledLocally) return;
+                  battleRef(id).once("value").then((freshSnap) => {
+                    const fresh = freshSnap.val();
+                    if (fresh && fresh.status === "live" && typeof fresh.startedAt === "number" && state.revealStartedFor !== id && !state.settledLocally) {
+                      state.arenaBattle = { id, ...fresh };
+                      state.revealStartedFor = id;
+                      startSyncedReveal();
+                    }
+                  });
+                }, 1000);
+              }
+              debitIfNeeded(id, data); // covers already-seated players (host, earlier FFA joiners) who weren't the one who triggered "live"
+            }
+          };
+          ref.on("value", handler);
+          state.arenaUnsub = () => ref.off("value", handler);
+        }
+
+        function subscribeToLobbyList() {
+          const seenLive = {};
+          battlesRef().on("value", (snap) => {
+            const val = snap.val() || {};
+            const now = Date.now();
+            const clean = {};
+            Object.entries(val).forEach(([id, b]) => {
+              // Finished battles vanish 20 minutes after they finished (doneAt).
+              if (b.status === "done") {
+                const doneAt = b.doneAt || b.createdAt || 0;
+                if (typeof doneAt === "number" && now - doneAt > 20 * 60 * 1000) return;
+              } else {
+                // Waiting/live battles still get a generous 6hr cap so stale ones don't linger forever.
+                if (typeof b.createdAt === "number" && now - b.createdAt > 6 * 3600 * 1000 && b.status !== "live") return;
+              }
+              clean[id] = b;
+            });
+            state.lobbies = clean;
+
+            if (state.view === "lobby") {
+              Object.entries(clean).forEach(([id, b]) => {
+                if (b.status === "live" && !seenLive[id] && mySeat(b) >= 0 && !state.joiningInFlight[id]) {
+                  seenLive[id] = true;
+                  openBattle(id);
+                }
+              });
+            }
+            if (state.view === "lobby") render();
+          });
+
+          // Re-check every 30s so a finished battle disappears from the list on its own,
+          // even if nothing else changes in Firebase to trigger a fresh snapshot.
+          setInterval(() => {
+            if (state.view === "lobby") render();
+          }, 30000);
+        }
+
+        // =====================================================================
+        // SYNCED REVEAL ANIMATION — every client reads the exact same
+        // `results.{seat}` arrays from Firebase (written once by whoever's
+        // join-transaction filled the last seat) and animates local reels
+        // toward those values on the same clock, using the shared `startedAt`
+        // timestamp so every browser begins at the same moment regardless of
+        // tiny network delay differences.
+        // =====================================================================
+        const REEL_LEN = 34;
+        const WINNER_INDEX = 26;
+        const SPIN_MS_PER_CASE = 2600;
+
+        function buildReelStrip(finalItem) {
+          const items = [];
+          for (let i = 0; i < REEL_LEN; i++) {
+            items.push(i === WINNER_INDEX ? finalItem : randomFillerItem());
+          }
+          return items;
+        }
+
+        function itemHTML(item, extraClass) {
+          const rarity = RARITIES.find((r) => r.key === item.rarityKey) || RARITIES[0];
+          return `<div class="cb-item tier-${item.rarityKey} ${extraClass || ""}">
+            <div class="cb-item-icon">${item.icon}</div>
+            <div class="cb-item-name" style="color:${rarity.color};">${rarity.label}</div>
+            <div class="cb-item-amt">$${item.amount.toFixed(0)}</div>
+          </div>`;
+        }
+
+        function startSyncedReveal() {
+          const battle = state.arenaBattle;
+          if (!battle || !battle.results) return;
+          state.spinning = true;
+          const seats = seatList(battle).map((s) => s.seat);
+          const fresh = {};
+          seats.forEach((s) => fresh[s] = -1);
+          state.revealedIndex = fresh;
+          const total = battle.caseKeys.length;
+
+          // Anchor every case's spin start to the shared startedAt clock so every
+          // browser triggers each case's animation at the same wall-clock moment.
+          // Use serverNow() (Date.now() corrected for this device's clock drift
+          // vs the Firebase server) rather than raw Date.now() — startedAt was
+          // written by the SERVER's clock, so comparing it against a possibly-
+          // wrong local clock could produce a huge bogus gap.
+          const startedAt = typeof battle.startedAt === "number" ? battle.startedAt : serverNow();
+          const now = serverNow();
+          const elapsedIntoSeries = Math.max(0, now - startedAt);
+          const alreadyDoneCases = Math.floor(elapsedIntoSeries / SPIN_MS_PER_CASE);
+
+          function runCase(caseIdx) {
+            if (caseIdx >= total) {
+              finishReveal();
+              return;
+            }
+            const targetTime = startedAt + caseIdx * SPIN_MS_PER_CASE;
+            const delay = Math.max(0, targetTime - serverNow());
+            setTimeout(() => {
+              seats.forEach((s) => animateOneCase(s, caseIdx, battle.results[s][caseIdx]));
+              Shell.playChipSound("select");
+              setTimeout(() => {
+                seats.forEach((s) => state.revealedIndex[s] = caseIdx);
+                renderPulledRowsOnly();
+                runCase(caseIdx + 1);
+              }, SPIN_MS_PER_CASE - 200);
+            }, delay);
+          }
+
+          // If we joined mid-series (shouldn't normally happen since everyone lands
+          // on the arena at battle-start together, but guards against a late page
+          // load / refresh), fast-forward revealedIndex to match reality and jump
+          // straight to whichever case should be spinning now.
+          if (alreadyDoneCases > 0) {
+            seats.forEach((s) => state.revealedIndex[s] = Math.min(alreadyDoneCases, total) - 1);
+          }
+          runCase(Math.min(alreadyDoneCases, total));
+        }
+
+        function animateOneCase(seat, caseIdx, finalItem) {
+          const track = document.querySelector(`[data-cb-track="${seat}"]`);
+          if (!track) return;
+          const strip = buildReelStrip(finalItem);
+          track.style.transition = "none";
+          track.innerHTML = strip.map((it, i) => itemHTML(it, i === WINNER_INDEX ? "winner-target" : "")).join("");
+          track.style.transform = "translateX(-50%)";
+          void track.offsetWidth;
+
+          const sampleItem = track.children[0];
+          const itemRect = sampleItem ? sampleItem.getBoundingClientRect() : { width: 76 };
+          const trackStyle = getComputedStyle(track);
+          const gap = parseFloat(trackStyle.gap || trackStyle.columnGap) || 8;
+          const padLeft = parseFloat(trackStyle.paddingLeft) || 0;
+          const stride = itemRect.width + gap;
+          const targetOffset = -(padLeft + WINNER_INDEX * stride + itemRect.width / 2);
+
+          requestAnimationFrame(() => {
+            track.style.transition = `transform ${SPIN_MS_PER_CASE - 300}ms cubic-bezier(.1,.7,.15,1)`;
+            track.style.transform = `translateX(${targetOffset}px)`;
+          });
+
+          setTimeout(() => {
+            const winnerEl = track.children[WINNER_INDEX];
+            if (winnerEl) winnerEl.classList.add("winner-slot");
+          }, SPIN_MS_PER_CASE - 280);
+        }
+
+        // Sum of everything a given seat pulled.
+        function seatTotal(battle, seat) {
+          return ((battle.results && battle.results[seat]) || []).reduce((s, it) => s + it.amount, 0);
+        }
+
+        // Works out who/what won: for team mode, compares combined team totals;
+        // otherwise compares individual seat totals. Returns
+        // { isTie, winningSeats: [seat,...], winningTeam: "red"|"blue"|null, pot }
+        function resolveBattleOutcome(battle) {
+          const seats = seatList(battle);
+          const pot = seats.reduce((s, p) => s + seatTotal(battle, p.seat), 0);
+          if (MODES[battle.mode] && MODES[battle.mode].teams) {
+            const redSeats = seats.filter((p) => p.team === "red").map((p) => p.seat);
+            const blueSeats = seats.filter((p) => p.team === "blue").map((p) => p.seat);
+            const redTotal = redSeats.reduce((s, seat) => s + seatTotal(battle, seat), 0);
+            const blueTotal = blueSeats.reduce((s, seat) => s + seatTotal(battle, seat), 0);
+            const isTie = redTotal === blueTotal;
+            const winningTeam = isTie ? null : (redTotal > blueTotal ? "red" : "blue");
+            const winningSeats = isTie ? [] : (winningTeam === "red" ? redSeats : blueSeats);
+            return { isTie, winningSeats, winningTeam, pot, redTotal, blueTotal };
+          }
+          const totals = seats.map((p) => ({ seat: p.seat, total: seatTotal(battle, p.seat) }));
+          const maxTotal = totals.reduce((m, t) => Math.max(m, t.total), -Infinity);
+          const winners = totals.filter((t) => t.total === maxTotal);
+          const isTie = winners.length > 1;
+          return { isTie, winningSeats: winners.map((w) => w.seat), winningTeam: null, pot };
+        }
+
+        function finishReveal() {
+          state.spinning = false;
+          const battle = state.arenaBattle;
+          if (!battle || state.settledLocally) { render(); return; }
+          state.settledLocally = true;
+
+          const seat = mySeat(battle);
+          if (seat < 0) { render(); return; } // shouldn't happen, but don't touch balances if we're not a seated player
+
+          const stake = battle.totalValue || 0;
+          const outcome = resolveBattleOutcome(battle);
+          const iWon = !outcome.isTie && outcome.winningSeats.includes(seat);
+
+          if (outcome.isTie) {
+            // Nobody profits, nobody loses — everyone gets their own stake back.
+            Shell.addCashBalance(stake);
+            Shell.addBetEntry({ game: "casebattles", bet: stake, won: false, profit: 0 });
+          } else if (iWon) {
+            // Winner(s) split the actual combined pulled value evenly among
+            // however many seats are on the winning side (1 for 1v1/FFA winner,
+            // 2 for a winning 2v2 team).
+            const share = outcome.pot / outcome.winningSeats.length;
+            Shell.addCashBalance(share);
+            Shell.addBetEntry({ game: "casebattles", bet: stake, won: true, profit: share - stake });
+            Shell.notify(`You won the case battle! +${Shell.fmtMoney(share - stake)} profit.`);
+          } else {
+            Shell.addBetEntry({ game: "casebattles", bet: stake, won: false, profit: -stake });
+          }
+
+          // Mark the battle done. Whichever client's animation finishes last just
+          // idempotently flips the same field — harmless if more than one tries.
+          battleRef(battle.id).update({ status: "done", doneAt: firebase.database.ServerValue.TIMESTAMP });
+          render();
+        }
+
+        // =====================================================================
+        // RARITY ODDS MODAL
+        // =====================================================================
+        function oddsModalInnerHTML() {
+          const rows = CASE_TIERS.map((tier) => {
+            const weighted = weightedRaritiesFor(tier);
+            const totalW = weighted.reduce((s, r) => s + r.w, 0);
+            const norm = CASE_EV_NORM[tier.key] || 1;
+            const rowsHTML = weighted.map((r) => {
+              const pct = ((r.w / totalW) * 100);
+              const [lo, hi] = RARITY_MULT[r.key];
+              const dollarLo = tier.cost * lo * norm;
+              const dollarHi = tier.cost * hi * norm;
+              return `<div class="cb-odds-row">
+                <span class="cb-odds-dot" style="background:${r.color};"></span>
+                <span class="cb-odds-label" style="color:${r.color};">${r.label}</span>
+                <span class="cb-odds-icons">${(ITEM_ICONS[r.key] || []).join(" ")}</span>
+                <span class="cb-odds-pct">${pct >= 10 ? pct.toFixed(1) : pct.toFixed(2)}%</span>
+              </div>
+              <div style="margin:-4px 0 4px 19px;color:#69758c;font-size:9.5px;font-family:var(--mono);">${Shell.fmtMoney(dollarLo)} – ${Shell.fmtMoney(dollarHi)}</div>`;
+            }).join("");
+            return `<div class="cb-odds-tier">
+              <div class="cb-odds-tier-head"><span>${tier.icon}</span> ${tier.name} <span>· ${Shell.fmtMoney(tier.cost)} per case</span></div>
+              ${rowsHTML}
+            </div>`;
+          }).join("");
+          return `
+            <div class="shell-modal-head">
+              <h3>${svg("gift")} Rarity Odds & Contents</h3>
+              <button class="shell-modal-close" data-close-odds aria-label="Close">${svg("x")}</button>
+            </div>
+            <p style="margin:0 0 14px;color:#8791a6;font-size:11.5px;line-height:1.6;">Every case tier rolls from the same 6 rarities, but pricier cases shift the odds toward the good stuff. Dollar ranges shown are what that rarity actually pays out from that case.</p>
+            ${rows}
+            <div class="cb-odds-note">Payouts are rebalanced per tier so the average pull is always worth a bit less than the case's cost (house edge) — pricier cases swing harder, not "safer".</div>
+          `;
+        }
+
+        function openOddsModal() {
+          document.querySelectorAll("[data-cb-odds-overlay]").forEach((el) => el.remove());
+          const wrap = document.createElement("div");
+          wrap.className = "shell-modal-overlay";
+          wrap.setAttribute("data-cb-odds-overlay", "");
+          wrap.innerHTML = `<div class="shell-modal-box cb-odds-box" data-odds-box>${oddsModalInnerHTML()}</div>`;
+          document.body.appendChild(wrap);
+          Shell.bindOverlayOutsideClose(wrap);
+          wrap.addEventListener("click", (e) => { if (e.target.closest("[data-close-odds]")) wrap.remove(); });
+        }
+
+        // =====================================================================
+        // RENDER — LOBBY
+        // =====================================================================
+        function lobbyCardHTML(id, b) {
+          const seats = seatList(b);
+          const mine = seats.some((s) => s.id === myId());
+          const waiting = b.status === "waiting";
+          const live = b.status === "live";
+          const done = b.status === "done";
+          const needed = seatsForBattle(b);
+          const canJoin = waiting && !mine && seats.length < needed;
+          const caseCounts = {};
+          (b.caseKeys || []).forEach((k) => caseCounts[k] = (caseCounts[k] || 0) + 1);
+          const caseChips = Object.entries(caseCounts).map(([k, n]) => {
+            const tier = CASE_TIERS.find((c) => c.key === k);
+            return `<span class="cb-lobby-case-chip">${tier ? tier.icon : "📦"} ${tier ? tier.name : k} ×${n}</span>`;
+          }).join("");
+          const modeInfo = MODES[b.mode] || MODES["1v1"];
+
+          const playerChips = seats.map((p) => {
+            const teamClass = p.team ? `team-${p.team}` : "";
+            return `<div class="cb-lobby-player ${teamClass}"><span class="cb-lobby-avatar" style="background:${p.color || "#5cffe7"};">${(p.name || "?").slice(0,1).toUpperCase()}</span><span class="cb-lobby-player-name">${p.name}</span></div>`;
+          }).join("");
+          const openSlots = Math.max(0, needed - seats.length);
+          const emptyChips = waiting ? Array.from({ length: openSlots }, () => `<div class="cb-lobby-slot-empty">${svg("user")} Open</div>`).join("") : "";
+
+          return `<div class="cb-lobby-card ${mine ? "mine" : ""}">
+            <div class="cb-lobby-head">
+              <div class="cb-lobby-value">${svg("gift")} ${Shell.fmtMoney(b.totalValue || 0)} <span class="cb-lobby-mode">${modeInfo.label}</span></div>
+              <span class="cb-lobby-status ${waiting ? "waiting" : live ? "live" : "done"}">${waiting ? `Waiting ${seats.length}/${needed}` : live ? "Live" : "Finished"}</span>
+            </div>
+            <div class="cb-lobby-players">${playerChips}${emptyChips}</div>
+            <div class="cb-lobby-cases-row">${caseChips}</div>
+            <div class="cb-lobby-actions">
+              ${waiting && b.hostId === myId() ? `<button class="cb-lobby-btn cancel" data-cancel-battle="${id}">Cancel</button><button class="cb-lobby-btn watch" data-open-battle="${id}">Open</button>` : ""}
+              ${canJoin ? `<button class="cb-lobby-btn join" data-join-battle="${id}">Join Battle</button>` : ""}
+              ${(live || done) ? `<button class="cb-lobby-btn watch" data-open-battle="${id}">${live ? "Watch Live" : "View Result"}</button>` : ""}
+            </div>
+          </div>`;
+        }
+
+        function caseTileHTML(tier) {
+          const count = state.createSelection[tier.key] || 0;
+          return `<div class="cb-case-tile ${count > 0 ? "has-count" : ""}">
+            <div class="cb-case-tile-icon">${tier.icon}</div>
+            <div class="cb-case-tile-name">${tier.name}</div>
+            <div class="cb-case-tile-cost">${Shell.fmtMoney(tier.cost)}</div>
+            <div class="cb-case-tile-stepper">
+              <button data-case-step="${tier.key}" data-dir="-1" ${count <= 0 ? "disabled" : ""}>−</button>
+              <strong>${count}</strong>
+              <button data-case-step="${tier.key}" data-dir="1" ${totalCasesSelected() >= MAX_CASES_PER_PLAYER ? "disabled" : ""}>+</button>
+            </div>
+          </div>`;
+        }
+
+        function modeTileHTML(key) {
+          const m = MODES[key];
+          return `<div class="cb-mode-tile ${state.createMode === key ? "active" : ""}" data-mode-tile="${key}">
+            <strong>${m.label}</strong>
+            <span>${m.desc}</span>
+          </div>`;
+        }
+
+        function renderCreateModalOnly() {
+          const box = document.querySelector("[data-create-box]");
+          if (!box) return;
+          box.innerHTML = createModalInnerHTML();
+          bindCreateModal();
+        }
+
+        function createModalInnerHTML() {
+          const total = totalCostSelected();
+          const count = totalCasesSelected();
+          const balance = Shell.getCashBalance();
+          return `
+            <div class="shell-modal-head">
+              <h3>${svg("gift")} Create Case Battle</h3>
+              <button class="shell-modal-close" data-close-create aria-label="Close">${svg("x")}</button>
+            </div>
+            <div class="cb-mode-tiles">${Object.keys(MODES).map(modeTileHTML).join("")}</div>
+            ${state.createMode === "ffa" ? `
+              <div class="cb-ffa-size-row">
+                <span>Players in this battle</span>
+                <div class="cb-ffa-size-stepper">
+                  <button data-ffa-size-dir="-1" ${state.createFfaSize <= FFA_MIN ? "disabled" : ""}>−</button>
+                  <strong>${state.createFfaSize}</strong>
+                  <button data-ffa-size-dir="1" ${state.createFfaSize >= FFA_MAX ? "disabled" : ""}>+</button>
+                </div>
+              </div>
+            ` : ""}
+            <p style="margin:0 0 14px;color:#8791a6;font-size:11.5px;line-height:1.6;">Pick up to ${MAX_CASES_PER_PLAYER} cases. Every player opens the exact same list — the payout is the ACTUAL combined value everyone pulls, split among the winning side.</p>
+            <div class="cb-case-tiles">${CASE_TIERS.map(caseTileHTML).join("")}</div>
+            <div class="cb-create-summary">
+              <span>${count} case${count === 1 ? "" : "s"} selected · your stake</span>
+              <strong>${Shell.fmtMoney(total)}</strong>
+            </div>
+            ${total > balance ? `<div class="cb-create-error">You only have ${Shell.fmtMoney(balance)} — reduce your selection.</div>` : ""}
+            ${state.createError ? `<div class="cb-create-error">${state.createError}</div>` : ""}
+            <button class="vault-submit" data-submit-create ${count === 0 || total > balance ? "disabled" : ""}>List Battle — ${Shell.fmtMoney(total)}</button>
+          `;
+        }
+
+        function closeCreateModal() {
+          document.querySelectorAll("[data-cb-create-overlay]").forEach((el) => el.remove());
+        }
+
+        function openCreateModal() {
+          closeCreateModal();
+          const wrap = document.createElement("div");
+          wrap.className = "shell-modal-overlay";
+          wrap.setAttribute("data-cb-create-overlay", "");
+          wrap.innerHTML = `<div class="shell-modal-box cb-create-box" data-create-box>${createModalInnerHTML()}</div>`;
+          document.body.appendChild(wrap);
+          Shell.bindOverlayOutsideClose(wrap);
+          // Delegated on the overlay itself (not re-bound per render) so the X
+          // button keeps working even after renderCreateModalOnly() replaces the
+          // box's innerHTML — previously it only worked before the first click on
+          // any case stepper, since that swap dropped the old direct listener.
+          wrap.addEventListener("click", (e) => { if (e.target.closest("[data-close-create]")) closeCreateModal(); });
+          bindCreateModal();
+        }
+
+        function bindCreateModal() {
+          document.querySelectorAll("[data-mode-tile]").forEach((btn) => btn.onclick = () => {
+            state.createMode = btn.dataset.modeTile;
+            state.createError = "";
+            renderCreateModalOnly();
+          });
+          document.querySelectorAll("[data-ffa-size-dir]").forEach((btn) => btn.onclick = () => {
+            const dir = parseInt(btn.dataset.ffaSizeDir, 10);
+            state.createFfaSize = Math.min(FFA_MAX, Math.max(FFA_MIN, state.createFfaSize + dir));
+            renderCreateModalOnly();
+          });
+          document.querySelectorAll("[data-case-step]").forEach((btn) => btn.onclick = () => {
+            const key = btn.dataset.caseStep;
+            const dir = parseInt(btn.dataset.dir, 10);
+            const cur = state.createSelection[key] || 0;
+            if (dir > 0 && totalCasesSelected() >= MAX_CASES_PER_PLAYER) return;
+            const next = Math.max(0, cur + dir);
+            if (next === 0) delete state.createSelection[key];
+            else state.createSelection[key] = next;
+            state.createError = "";
+            renderCreateModalOnly();
+          });
+          const submitBtn = document.querySelector("[data-submit-create]");
+          if (submitBtn) submitBtn.onclick = createBattle;
+        }
+
+        function renderLobby() {
+          const entries = Object.entries(state.lobbies).sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+          const liveEntries = entries.filter(([, b]) => b.status !== "done");
+          const historyEntries = entries.filter(([, b]) => b.status === "done");
+
+          content.innerHTML = `<div class="content">
+            <div class="cb-intro">
+              <div>
+                <div class="eyebrow"><i></i> Play with friends</div>
+                <h1>Case <em>Battles.</em></h1>
+                <p>List a battle with your own case selection, wait for friends to join, then watch every reel spin live side by side. The pot is the real combined value everyone pulls.</p>
+              </div>
+              <div class="cb-intro-actions">
+                <button class="cb-odds-btn" data-open-odds>${svg("spark")} Rarity Odds</button>
+                <button class="cb-create-btn" data-open-create>${svg("gift")} Create Battle</button>
+              </div>
+            </div>
+            <div class="cb-lobby-grid">
+              ${liveEntries.length ? liveEntries.map(([id, b]) => lobbyCardHTML(id, b)).join("") : `<div class="cb-lobby-empty">No battles right now — be the first to create one.</div>`}
+            </div>
+            ${historyEntries.length ? `
+            <div class="shelf-head" style="margin:28px 0 13px;"><div><h3 style="margin:0;font-size:16px;">History</h3><p style="margin:4px 0 0;color:#69758c;font-size:10.5px;">Finished battles — clears itself after 20 minutes.</p></div></div>
+            <div class="cb-lobby-grid" style="opacity:.72;">
+              ${historyEntries.map(([id, b]) => lobbyCardHTML(id, b)).join("")}
+            </div>` : ""}
+          </div>`;
+
+          document.querySelector("[data-open-create]").onclick = openCreateModal;
+          document.querySelector("[data-open-odds]").onclick = openOddsModal;
+          document.querySelectorAll("[data-join-battle]").forEach((btn) => btn.onclick = () => joinBattle(btn.dataset.joinBattle));
+          document.querySelectorAll("[data-open-battle]").forEach((btn) => btn.onclick = () => openBattle(btn.dataset.openBattle));
+          document.querySelectorAll("[data-cancel-battle]").forEach((btn) => btn.onclick = () => cancelBattle(btn.dataset.cancelBattle));
+        }
+
+        // =====================================================================
+        // RENDER — ARENA
+        // =====================================================================
+        function reelWrapHTML(seat, idleItems) {
+          return `<div class="cb-reel-wrap">
+            <div class="cb-reel-fade left"></div>
+            <div class="cb-reel-fade right"></div>
+            <div class="cb-reel-marker"></div>
+            <div class="cb-reel-track" data-cb-track="${seat}" style="transform: translateX(-50%);">
+              ${idleItems.map((it) => itemHTML(it)).join("")}
+            </div>
+          </div>`;
+        }
+
+        function pulledRowHTML(seat, battle) {
+          if (!battle.results || !battle.results[seat]) return "";
+          const idx = state.revealedIndex[seat] != null ? state.revealedIndex[seat] : -1;
+          const items = (battle.results[seat] || []).slice(0, idx + 1);
+          return `<div class="cb-pulled-row" data-cb-pulled="${seat}">${items.map((it) => {
+            return `<span class="cb-pulled-chip tier-${it.rarityKey}">${it.icon} $${it.amount.toFixed(0)}</span>`;
+          }).join("")}</div>`;
+        }
+
+        function renderPulledRowsOnly() {
+          const battle = state.arenaBattle;
+          if (!battle) return;
+          seatList(battle).forEach(({ seat }) => {
+            const el = document.querySelector(`[data-cb-pulled="${seat}"]`);
+            if (el) el.outerHTML = pulledRowHTML(seat, battle);
+            const totalEl = document.querySelector(`[data-cb-total="${seat}"]`);
+            if (totalEl) totalEl.textContent = Shell.fmtMoney(runningTotal(battle, seat));
+            const progEl = document.querySelector(`[data-cb-progress="${seat}"]`);
+            if (progEl) progEl.textContent = `${(state.revealedIndex[seat] != null ? state.revealedIndex[seat] : -1) + 1} / ${battle.caseKeys.length}`;
+          });
+          const potEl = document.querySelector("[data-cb-pot-live]");
+          if (potEl) potEl.textContent = Shell.fmtMoney(seatList(battle).reduce((s, p) => s + runningTotal(battle, p.seat), 0));
+        }
+
+        function runningTotal(battle, seat) {
+          if (!battle.results || !battle.results[seat]) return 0;
+          const idx = state.revealedIndex[seat] != null ? state.revealedIndex[seat] : -1;
+          return (battle.results[seat] || []).slice(0, idx + 1).reduce((s, it) => s + it.amount, 0);
+        }
+
+        function playerPanelHTML(seat, p, battle, outcome) {
+          const idleItems = Array.from({ length: 10 }, randomFillerItem);
+          const total = battle.caseKeys.length;
+          const done = battle.status === "done";
+          const totalAmount = battle.results ? runningTotal(battle, seat) : 0;
+
+          let winnerClass = "";
+          if (done && outcome && !outcome.isTie) {
+            winnerClass = outcome.winningSeats.includes(seat) ? "winner" : "loser";
+          }
+          const teamClass = p.team ? `team-${p.team}` : "";
+
+          return `<div class="cb-player-panel ${winnerClass} ${teamClass}">
+            <div class="cb-player-head">
+              <span class="cb-player-avatar" style="background:${p.color || "#5cffe7"};">${(p.name || "?").slice(0,1).toUpperCase()}</span>
+              <span class="cb-player-name">${p.name}</span>
+              ${p.team ? `<span class="cb-player-team-tag ${p.team}">${p.team}</span>` : ""}
+              <div class="cb-player-total">
+                <strong data-cb-total="${seat}">${Shell.fmtMoney(totalAmount)}</strong>
+                <span>Total pulled</span>
+              </div>
+            </div>
+            ${battle.status !== "waiting" ? reelWrapHTML(seat, idleItems) : `<div class="cb-reel-wrap"></div>`}
+            ${battle.results ? `<div class="cb-case-progress"><span>Cases opened</span><span data-cb-progress="${seat}">${((state.revealedIndex[seat] != null ? state.revealedIndex[seat] : -1) + 1)} / ${total}</span></div>` : ""}
+            ${pulledRowHTML(seat, battle)}
+          </div>`;
+        }
+
+        function emptySeatPanelHTML() {
+          return `<div class="cb-player-panel">
+            <div class="cb-waiting-panel">
+              <div class="cb-waiting-spin"></div>
+              <div style="color:#8791a6;font-size:12px;font-weight:700;">Waiting for a player…</div>
+            </div>
+          </div>`;
+        }
+
+        function resultBannerHTML(battle, outcome) {
+          if (battle.status !== "done" || !battle.results) return "";
+          const seats = seatList(battle);
+          const seat = mySeat(battle);
+          const iWon = !outcome.isTie && outcome.winningSeats.includes(seat);
+          const share = outcome.winningSeats.length ? outcome.pot / outcome.winningSeats.length : 0;
+          const stake = battle.totalValue || 0;
+
+          let title, sub;
+          if (outcome.isTie) {
+            title = "It's a tie — stakes refunded";
+            sub = "Combined pulls ended dead even.";
+          } else if (MODES[battle.mode] && MODES[battle.mode].teams) {
+            title = `Team ${outcome.winningTeam.toUpperCase()} wins the battle!`;
+            sub = `Red ${Shell.fmtMoney(outcome.redTotal)} vs Blue ${Shell.fmtMoney(outcome.blueTotal)}`;
+          } else {
+            const winnerNames = outcome.winningSeats.map((s) => (seats.find((p) => p.seat === s) || {}).name).filter(Boolean);
+            title = winnerNames.length > 1 ? `${winnerNames.join(" & ")} split the win!` : `${winnerNames[0] || "A player"} wins the battle!`;
+            sub = `Pot: ${Shell.fmtMoney(outcome.pot)} total pulled across everyone`;
+          }
+
+          return `<div class="cb-result-banner ${iWon ? "win" : ""}">
+            <div class="cb-result-title">${title}</div>
+            <div class="cb-result-sub">${sub}</div>
+            ${!outcome.isTie ? `<div class="cb-result-amount">${iWon ? "+" : ""}${iWon ? Shell.fmtMoney(share - stake) : "Pot: " + Shell.fmtMoney(outcome.pot)}</div>` : ""}
+            <div class="cb-result-actions">
+              <button class="cb-back-btn" data-back-lobby>Back to Lobby</button>
+            </div>
+          </div>`;
+        }
+
+        function vsGridHTML(battle, outcome) {
+          const needed = seatsForBattle(battle);
+          const seats = seatList(battle);
+          const bySeat = {};
+          seats.forEach((p) => bySeat[p.seat] = p);
+
+          if (MODES[battle.mode] && MODES[battle.mode].teams) {
+            const redPanels = [0, 1].map((s) => bySeat[s] ? playerPanelHTML(s, bySeat[s], battle, outcome) : emptySeatPanelHTML()).join("");
+            const bluePanels = [2, 3].map((s) => bySeat[s] ? playerPanelHTML(s, bySeat[s], battle, outcome) : emptySeatPanelHTML()).join("");
+            const done = battle.status === "done";
+            const redWin = done && outcome && !outcome.isTie && outcome.winningTeam === "red";
+            const blueWin = done && outcome && !outcome.isTie && outcome.winningTeam === "blue";
+            return `<div class="cb-teams-grid">
+              <div class="cb-team-block red ${redWin ? "winner" : ""}">
+                <div class="cb-team-header red">${svg("shield") || ""} Team Red</div>
+                ${battle.results ? `<div class="cb-team-total" data-cb-team-total="red">${Shell.fmtMoney([0,1].reduce((s,seatIdx)=>s+runningTotal(battle,seatIdx),0))}</div>` : ""}
+                ${redPanels}
+              </div>
+              <div class="cb-team-block blue ${blueWin ? "winner" : ""}">
+                <div class="cb-team-header blue">${svg("shield") || ""} Team Blue</div>
+                ${battle.results ? `<div class="cb-team-total" data-cb-team-total="blue">${Shell.fmtMoney([2,3].reduce((s,seatIdx)=>s+runningTotal(battle,seatIdx),0))}</div>` : ""}
+                ${bluePanels}
+              </div>
+            </div>`;
+          }
+
+          const gridClass = needed >= 6 ? "seats-6" : (needed === 3 || needed === 5) ? "seats-3" : "";
+          const panels = Array.from({ length: needed }, (_, s) => bySeat[s] ? playerPanelHTML(s, bySeat[s], battle, outcome) : emptySeatPanelHTML());
+          return `<div class="cb-vs-grid ${gridClass}">${panels.join("")}</div>`;
+        }
+
+        function renderArena() {
+          const battle = state.arenaBattle;
+          if (!battle) {
+            content.innerHTML = `<div class="content"><div class="cb-lobby-empty">Loading battle…</div></div>`;
+            return;
+          }
+          // While a reveal is actively animating for this battle, DO NOT rebuild
+          // the arena DOM. Firebase's `.on("value", ...)` fires on every write to
+          // this battle — including our own `debited/{seat}` write from
+          // debitIfNeeded, which lands milliseconds after "live" and would
+          // otherwise trigger a second full innerHTML rebuild right as
+          // startSyncedReveal() is mid-animation. That wipes out the exact
+          // [data-cb-track] elements the reveal is transitioning, freezing the
+          // visuals while queued setTimeouts keep firing sound effects. Instead,
+          // just let the in-flight reveal keep driving the DOM via
+          // renderPulledRowsOnly(); the full rebuild happens once the reveal
+          // finishes (spinning goes false) or on the next real state change.
+          if (state.spinning && state.revealStartedFor === battle.id && state.arenaRenderedFor === battle.id) {
+            renderPulledRowsOnly();
+            return;
+          }
+          state.arenaRenderedFor = battle.id;
+          const done = battle.status === "done";
+          const outcome = done && battle.results ? resolveBattleOutcome(battle) : null;
+          const liveSum = battle.results ? seatList(battle).reduce((s, p) => s + runningTotal(battle, p.seat), 0) : 0;
+          const needed = seatsForBattle(battle);
+          const seats = seatList(battle);
+          const modeInfo = MODES[battle.mode] || MODES["1v1"];
+
+          content.innerHTML = `<div class="content">
+            <a class="cb-back-link" href="#" data-back-lobby style="margin-bottom:16px;display:inline-flex;">${svg("chevronLeft")} Back to lobby</a>
+            <div class="cb-arena-wrap">
+              <div class="cb-arena-top">
+                <div class="cb-arena-pot">
+                  ${svg("gift")} ${battle.results ? `Pot: <span data-cb-pot-live>${Shell.fmtMoney(liveSum)}</span>` : `Stake: ${Shell.fmtMoney(battle.totalValue || 0)} / player`}
+                  <small>${modeInfo.label} · ${seats.length}/${needed} joined</small>
+                </div>
+                <div class="cb-arena-status-text">${battle.status === "waiting" ? "Waiting for players…" : battle.status === "live" ? "Battle in progress…" : "Battle finished"}</div>
+              </div>
+              ${vsGridHTML(battle, outcome)}
+              ${done && outcome ? resultBannerHTML(battle, outcome) : ""}
+              <div class="cb-legend">${RARITIES.map((r) => `<div class="cb-legend-item"><span class="cb-legend-dot" style="background:${r.color};"></span>${r.label}</div>`).join("")}<button class="cb-odds-btn" style="padding:4px 10px;font-size:10px;" data-open-odds-inline>${svg("spark")} Full odds</button></div>
+            </div>
+          </div>`;
+
+          document.querySelectorAll("[data-back-lobby]").forEach((el) => el.addEventListener("click", (e) => { e.preventDefault(); backToLobby(); }));
+          const oddsInline = document.querySelector("[data-open-odds-inline]");
+          if (oddsInline) oddsInline.onclick = openOddsModal;
+        }
+
+        function render() {
+          if (state.view === "lobby") renderLobby();
+          else renderArena();
+        }
+
+        // =====================================================================
+        // BOOT
+        // =====================================================================
+        tryInitDb((ok) => {
+          if (!ok) {
+            content.innerHTML = `<div class="content"><div class="cb-lobby-empty">Case Battles needs the same chat connection as the site's Friends Chat — it isn't configured yet. See chat.js for setup.</div></div>`;
+            return;
+          }
+          subscribeToLobbyList();
+          if (state.view === "arena" && state.battleId) subscribeToArena(state.battleId);
+          render();
+        }, 25);
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

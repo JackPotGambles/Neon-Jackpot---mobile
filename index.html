@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Neon Jackpot fictional arcade demo" />
+    <title>Neon Jackpot</title>
+    <link rel="stylesheet" href="./shell.css" />
+    <style>
+      .content { max-width: 1235px; margin: auto; padding: 34px 32px 60px; }
+      .intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; margin-bottom: 27px; }
+      .eyebrow { display: flex; align-items: center; gap: 8px; color: #ff5c9f; font-family: var(--mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; }
+      .eyebrow i { width: 25px; height: 1px; background: #ff5c9f; }
+      h1 { max-width: 580px; margin: 10px 0 0; font-size: clamp(31px, 4.2vw, 53px); font-weight: 800; letter-spacing: -.06em; line-height: .96; }
+      h1 em { color: var(--mint); font-style: normal; text-shadow: 0 0 24px rgba(92,255,231,.24); }
+      .intro p { max-width: 260px; margin: 0 0 2px; color: #79849b; font-size: 11px; line-height: 1.6; text-align: right; }
+      .dashboard { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 17px; align-items: start; }
+      .dashboard.closed { grid-template-columns: minmax(0, 1fr); }
+      .hero { position: relative; min-height: 346px; overflow: hidden; padding: 31px 34px; background: linear-gradient(117deg, #1b1d3e, #1d1540 42%, #101528); border: 1px solid rgba(174,127,255,.28); border-radius: 17px; }
+      .hero-copy { position: relative; z-index: 1; max-width: 400px; }
+      .kicker { display: inline-flex; align-items: center; gap: 7px; padding: 6px 9px; color: #a8a0ff; background: rgba(115,93,255,.16); border: 1px solid rgba(168,160,255,.27); border-radius: 5px; font-family: var(--mono); font-size: 9px; letter-spacing: .11em; }
+      h2 { margin: 21px 0 10px; font-size: clamp(28px, 3.6vw, 47px); font-weight: 800; letter-spacing: -.06em; line-height: .94; }
+      h2 span { color: var(--pink); }
+      .hero p { max-width: 280px; color: #a3a6c6; font-size: 11px; line-height: 1.65; }
+      .secondary { display: inline-flex; align-items: center; gap: 7px; margin-top: 23px; padding: 11px 14px; color: #b7b7d5; background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.12); border-radius: 9px; font-size: 11px; font-weight: 700; }
+      .hero-art { position: absolute; right: 50px; bottom: 32px; width: 155px; height: 220px; opacity: .88; }
+      .hero-art::before { content: ""; position: absolute; inset: 7px -25px 38px; border: 1px solid rgba(92,255,231,.42); border-radius: 50%; transform: rotate(-28deg); box-shadow: 0 0 0 22px rgba(92,255,231,.025), 0 0 0 52px rgba(92,255,231,.02); }
+      .hero-art::after { content: ""; position: absolute; top: 45px; left: 33px; width: 92px; height: 118px; background: linear-gradient(135deg, rgba(92,255,231,.88), rgba(104,80,255,.8) 48%, rgba(255,87,159,.9)); clip-path: polygon(50% 0, 95% 25%, 77% 83%, 49% 100%, 21% 83%, 4% 25%); }
+      .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin-top: 17px; overflow: hidden; background: var(--line); border: 1px solid var(--line); border-radius: 12px; }
+      .stat { min-height: 74px; padding: 16px 17px; background: rgba(16,18,31,.74); }
+      .stat small { color: #69758c; font-family: var(--mono); font-size: 9px; }
+      .stat strong { display: block; margin-top: 7px; font-size: 17px; }
+      .mint { color: var(--mint); } .pink { color: var(--pink); } .positive { color: var(--mint) !important; } .negative { color: var(--red) !important; }
+      .tracker { padding: 19px 18px; background: rgba(17,20,33,.86); border: 1px solid var(--line); border-radius: 15px; }
+      .panel-head { display: flex; justify-content: space-between; gap: 10px; }
+      .panel-title { margin: 0; color: #e9edf4; font-size: 12px; font-weight: 800; }
+      .panel-micro { color: #657188; font-family: var(--mono); font-size: 9px; }
+      .tracker-status { font-family: var(--mono); font-size: 8px; }
+      .tracker-profit { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 23px; color: #718097; font-size: 10px; }
+      .tracker-profit strong { font-size: 24px; letter-spacing: -.05em; }
+      .chart-box { position: relative; height: 148px; margin: 15px 0 10px; overflow: hidden; background: linear-gradient(180deg, rgba(92,255,231,.045), transparent 50%, rgba(255,110,143,.045)); border: 1px solid var(--line); border-radius: 9px; }
+      .chart { position: absolute; inset: 10px 9px; width: calc(100% - 18px); height: calc(100% - 20px); }
+      .chart line { stroke: rgba(212,221,238,.4); stroke-width: .8; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
+      .chart polyline { fill: none; stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+      .chart .up { stroke: var(--mint); } .chart .down { stroke: var(--red); }
+      .baseline { position: absolute; top: calc(74% - 8px); right: 7px; padding: 2px 4px; color: #7b879c; background: #151a28; font-family: var(--mono); font-size: 7px; }
+      .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+      .metrics div { display: grid; gap: 5px; padding: 9px 8px; background: rgba(255,255,255,.025); border-radius: 7px; }
+      .metrics span { color: #68748c; font-family: var(--mono); font-size: 7px; text-transform: uppercase; }
+      .metrics strong { font-size: 12px; }
+      .shelf-head { display: flex; justify-content: space-between; align-items: center; margin: 33px 0 13px; gap: 12px; flex-wrap: wrap; }
+      .shelf-head h3 { margin: 0; font-size: 19px; letter-spacing: -.05em; }
+      .shelf-head p { margin: 4px 0 0; color: #69758b; font-size: 10px; }
+      .game-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 13px; }
+      .game { overflow: hidden; background: #121522; border: 1px solid var(--line); border-radius: 13px; }
+      .game-art { position: relative; display: grid; place-items: center; height: 150px; background: linear-gradient(145deg, #15394a, #111d40 60%, #271653); }
+      .game-art.blackjack { background: linear-gradient(160deg, #2b1e63, #171a3e 55%, #0f1330); }
+      .game-art.limbo { background: linear-gradient(160deg, #ff9c4d, #e8672c 55%, #b83f1e); }
+      /* dice/keno/plinko backgrounds + art now come from shell.css so every page (lobby, search modal, recent wins) matches */
+
+      /* Limbo card art: two overlapping multiplier chips, tilted like a hand of cards */
+      .limbo-art-chips { position: relative; width: 100%; height: 100%; display: grid; place-items: center; }
+      .limbo-chip { position: absolute; display: grid; place-items: center; width: 92px; height: 62px; background: #fbf1e3; border-radius: 8px; box-shadow: 0 10px 22px rgba(0,0,0,.28); color: #c8531f; font-family: var(--mono); font-weight: 800; font-size: 15px; }
+      .limbo-chip.back { transform: rotate(-14deg) translate(-30px, 10px); opacity: .95; }
+      .limbo-chip.front { transform: rotate(7deg) translate(14px, -8px); }
+
+      /* Blackjack card art: card back + ace face, fanned */
+      .bj-art-cards { position: relative; width: 100%; height: 100%; display: grid; place-items: center; }
+      .bj-card { position: absolute; width: 66px; height: 92px; border-radius: 8px; box-shadow: 0 10px 22px rgba(0,0,0,.32); }
+      .bj-card.back { background: linear-gradient(145deg, #2c63e0, #1c3fa0); border: 2px solid rgba(255,255,255,.25); transform: rotate(-10deg) translate(-14px, 6px); }
+      .bj-card.back::before { content: ""; position: absolute; inset: 8px; border: 1px solid rgba(255,255,255,.35); border-radius: 4px; }
+      .bj-card.face { background: #f7f3ec; transform: rotate(9deg) translate(14px, -6px); display: grid; place-items: center; color: #171a3e; font-weight: 800; font-size: 22px; }
+
+      .game-icon { display: grid; place-items: center; width: 66px; height: 66px; color: #e5fffa; border: 1px solid rgba(255,255,255,.4); border-radius: 18px; font-family: var(--mono); font-size: 11px; font-weight: 700; box-shadow: 0 0 25px rgba(92,255,231,.22), inset 0 0 18px rgba(255,255,255,.1); transform: rotate(-8deg); }
+      .game-card-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+      .game { border-radius: 13px; }
+      .game-art { border-radius: 13px; }
+      .favorite { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 27px; height: 27px; color: #95a0b6; background: rgba(8,10,18,.4); border: 1px solid rgba(255,255,255,.13); border-radius: 8px; z-index: 2; }
+      .favorite.saved { color: var(--pink); border-color: rgba(255,114,178,.5); }
+      .game-play { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; opacity: 0; background: rgba(8,10,18,.66); backdrop-filter: blur(2px); transition: opacity .18s ease; z-index: 1; text-align: center; padding: 0 10px; }
+      .game-art:hover .game-play.enabled { opacity: 1; }
+      .game-play-name { color: #fff; font-size: 13px; font-weight: 800; letter-spacing: -.02em; text-shadow: 0 2px 10px rgba(0,0,0,.5); transform: translateY(6px); transition: transform .18s ease; }
+      .game-art:hover .game-play.enabled .game-play-name { transform: translateY(0); }
+      .play-button { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; color: #04140f; background: var(--mint); border: 0; border-radius: 999px; font-size: 11px; font-weight: 800; box-shadow: 0 0 22px rgba(92,255,231,.4); transform: translateY(6px); transition: transform .18s ease; }
+      .game-art:hover .game-play.enabled .play-button { transform: translateY(0); }
+      .play-button svg { width: 13px; height: 13px; }
+      .game.unavailable .game-art { filter: grayscale(.6) brightness(.55); }
+      .unavailable-badge { position: absolute; top: 10px; left: 10px; padding: 4px 7px; color: #ffb4b4; background: rgba(30,10,14,.7); border: 1px solid rgba(255,110,143,.35); border-radius: 5px; font-family: var(--mono); font-size: 8px; text-transform: uppercase; letter-spacing: .04em; z-index: 2; }
+      .bottom { display: grid; grid-template-columns: minmax(0, 1.37fr) minmax(240px, .63fr); gap: 17px; margin-top: 17px; }
+      .reward, .quick { padding: 23px 25px; background: linear-gradient(110deg, #201834, #16152c 60%, #212646); border: 1px solid rgba(255,114,178,.2); border-radius: 14px; }
+      .reward h3 { margin: 10px 0 6px; font-size: 22px; letter-spacing: -.05em; } .reward p { max-width: 330px; margin: 0; color: #9a91aa; font-size: 10px; line-height: 1.55; }
+      .reward button { margin-top: 17px; padding: 8px 11px; color: #1a1520; background: #ffcf7d; border: 0; border-radius: 7px; font-size: 9px; font-weight: 800; }
+      .quick { padding: 19px; background: rgba(17,20,33,.86); border-color: var(--line); }
+      .quick-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px; color: #929db0; background: rgba(255,255,255,.025); border-radius: 8px; font-size: 10px; }
+      .quick-row span:last-child { margin-left: auto; color: #e6edf4; font-family: var(--mono); font-size: 9px; }
+      .disclaimer { display: flex; justify-content: center; gap: 7px; margin: 31px auto 0; color: #525e72; font-size: 9px; text-align: center; }
+      .search { display: flex; align-items: center; gap: 9px; width: 190px; padding: 9px 11px; color: #768197; background: #121522; border: 1px solid var(--line); border-radius: 10px; }
+      .search input { width: 100%; color: var(--text); background: none; border: 0; outline: 0; font-size: 11px; }
+      .search input::placeholder { color: #596278; }
+      .construction { display: grid; place-items: center; min-height: 420px; text-align: center; padding: 40px; background: #121522; border: 1px solid var(--line); border-radius: 17px; }
+      .construction h2 { margin: 14px 0 6px; }
+      .construction p { max-width: 340px; color: #79849b; font-size: 12px; }
+
+      /* ===== new welcome dashboard ===== */
+      .welcome-row { display: grid; grid-template-columns: minmax(0,1.35fr) minmax(0,1fr); gap: 16px; margin-bottom: 28px; }
+      .welcome-card { display: flex; flex-direction: column; justify-content: center; padding: 26px 28px; background: linear-gradient(120deg, #1b1d3e, #14172c 55%, #101528); border: 1px solid rgba(174,127,255,.22); border-radius: 16px; }
+      .welcome-card h1 { margin: 0 0 20px; font-size: clamp(22px, 2.6vw, 30px); font-weight: 800; letter-spacing: -.04em; }
+      .welcome-card h1 span { color: var(--mint); }
+      .progress-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+      .progress-title { display: flex; align-items: center; gap: 8px; color: #b6bfd2; font-size: 12px; font-weight: 700; }
+      .progress-nums { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; }
+      .progress-nums strong { font-size: 15px; }
+      .progress-nums span { color: #69758c; font-size: 11px; }
+      .progress-pct { margin-left: auto; color: #8791a6; font-size: 11px; }
+      .progress-track { position: relative; height: 8px; margin: 10px 0 14px; background: #0c0e18; border-radius: 999px; overflow: hidden; }
+      .progress-fill { height: 100%; background: linear-gradient(90deg, var(--mint), #7ad9ff); border-radius: 999px; }
+      .progress-ranks { display: flex; align-items: center; justify-content: space-between; }
+      .rank-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; color: #8791a6; background: rgba(255,255,255,.03); border: 1px solid var(--line); border-radius: 999px; font-family: var(--mono); font-size: 9.5px; }
+      .rank-chip.active { color: #ffcf7d; background: rgba(255,207,125,.1); border-color: rgba(255,207,125,.32); }
+      .originals-card { position: relative; display: flex; flex-direction: column; justify-content: flex-end; min-height: 100%; padding: 22px; overflow: hidden; background: linear-gradient(150deg, #182d55, #14213f 55%, #0f1830); border: 1px solid rgba(58,160,255,.25); border-radius: 16px; }
+      .originals-card::before { content: ""; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(92,255,231,.14), transparent 60%); }
+      .originals-card-tiles { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 14px; }
+      .originals-card-tiles div { aspect-ratio: 1; border-radius: 8px; }
+      .originals-card-cta { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; color: #eef6ff; font-size: 14px; font-weight: 800; }
+      .originals-card-cta svg { width: 15px; height: 15px; }
+
+      .bottom.bottom-single { grid-template-columns: 1fr; }
+      .reward.reward-wide { padding: 30px 34px; }
+      .reward.reward-wide h3 { font-size: 26px; }
+      .reward.reward-wide p { max-width: 520px; font-size: 11px; }
+      .wins-strip { display: flex; gap: 10px; margin-bottom: 30px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; -ms-overflow-style: none; }
+      .wins-strip::-webkit-scrollbar { display: none; }
+      .wins-empty { padding: 22px; color: #69758c; font-size: 12px; }
+      .win-card { flex: 0 0 108px; overflow: hidden; background: #121522; border: 1px solid var(--line); border-radius: 11px; }
+      .win-card[data-win-card] { cursor: pointer; transition: border-color .12s ease, transform .12s ease; }
+      .win-card[data-win-card]:hover { border-color: #3aa0ff; }
+      .win-card[data-win-card]:focus-visible { outline: 1px solid #3aa0ff; outline-offset: 1px; }
+      .win-thumb { position: relative; display: grid; place-items: center; height: 78px; overflow: hidden; }
+      .win-thumb-art { width: 100%; height: 100%; display: grid; place-items: center; color: #cfe9ff; font-family: var(--mono); font-size: 9px; font-weight: 800; text-align: center; padding: 4px; overflow: hidden; transform: scale(.62); }
+      .win-thumb-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+      .win-meta { display: flex; flex-direction: column; gap: 4px; padding: 8px 9px 10px; min-width: 0; }
+      .win-rank { display: flex; align-items: center; gap: 4px; min-width: 0; color: #8791a6; font-size: 8.5px; font-weight: 700; }
+      .win-rank svg { width: 10px; height: 10px; flex: none; }
+      .win-user { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+      .win-amt { color: var(--mint); font-family: var(--mono); font-size: 11px; font-weight: 800; }
+
+      @media (max-width: 900px) { .welcome-row { grid-template-columns: 1fr; } .originals-card { min-height: 200px; } }
+      @media (max-width: 1080px) { .content { padding-inline: 24px; } .game-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+      @media (max-width: 760px) {
+        .search { width: 34px; padding: 8px; } .search input { display: none; }
+        .content { padding: 25px 15px 40px; }
+        .intro { display: block; margin-bottom: 22px; } h1 { font-size: 37px; } .intro p { margin-top: 14px; text-align: left; } .dashboard, .bottom { grid-template-columns: 1fr; }
+        .hero { min-height: 360px; padding: 24px 22px; } .hero-art { right: -4px; bottom: 20px; opacity: .46; transform: scale(.85); } .stats { grid-template-columns: repeat(3, 1fr); } .stat { padding: 13px 10px; } .stat strong { font-size: 14px; }
+        .game-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; } .game-art { height: 130px; } .disclaimer { align-items: flex-start; line-height: 1.45; }
+        .welcome-card, .originals-card { padding: 20px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="site-shell">
+      <div class="site-grid">
+        <div id="site-sidebar"></div>
+        <div id="site-topbar"></div>
+        <div id="page-content"></div>
+      </div>
+    </div>
+    <script src="./promo-vault.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="./chat.js"></script>
+    <script src="./shell.js"></script>
+    <script src="./games.js"></script>
+    <script>
+      (() => {
+        const catalog = Array.isArray(window.GAME_CATALOG) ? window.GAME_CATALOG : [];
+        const content = document.getElementById("page-content");
+        const params = new URLSearchParams(location.search);
+
+        const state = {
+          tab: ["Lobby", "Games", "Rewards"].includes(params.get("tab")) ? params.get("tab") : "Lobby",
+          query: params.get("filter") === "favorites" ? "__favorites" : "",
+          trackerOpen: params.get("tracker") === "1",
+          claimed: false,
+        };
+        const history = [0, 420, 760, 340, 980, 620, 1260, 770, -120, -460, -150, 420, 180, 680, 1280];
+        let lastRenderedWins = [];
+        const svg = Shell.svg;
+
+        const gameArtBg = { limbo: "linear-gradient(145deg,#7a3a1e,#411220)", blackjack: "linear-gradient(130deg,#182d42,#16203d 56%,#321849)", dice: "linear-gradient(145deg,#31175d,#17254d 64%,#102f45)", keno: "linear-gradient(145deg,#123b3d,#17254d 64%,#22204e)", plinko: "linear-gradient(135deg,#3d2450,#152441 63%,#193b42)", dragontower: "linear-gradient(160deg,#182d42,#16203d 56%,#321849)" };
+        function recentWins(limit) {
+          const player = Shell.getPlayerProfile();
+          return Shell.getRecentPlayerWins(limit || 40).map((w) => ({
+            label: w.game.toUpperCase(),
+            bg: gameArtBg[w.gameId] || "linear-gradient(145deg,#173a5e,#0f2440)",
+            art: catalog.find((g) => g.id === w.gameId) || { art: "" },
+            user: player.name,
+            amount: w.amount,
+            bet: w.bet,
+          }));
+        }
+
+        const graph = () => {
+          const max = 2500, base = 74;
+          const points = history.map((value, index) => ({ value, x: index / Math.max(history.length - 1, 1) * 100, y: base - Math.max(-1, Math.min(1, value / max)) * 48 }));
+          const positive = points.map((p) => `${p.x},${p.value >= 0 ? p.y : base}`).join(" ");
+          const negative = points.map((p) => `${p.x},${p.value < 0 ? p.y : base}`).join(" ");
+          return `<svg class="chart" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Profit graph"><line x1="0" x2="100" y1="${base}" y2="${base}"/><polyline class="up" points="${positive}"/><polyline class="down" points="${negative}"/></svg><span class="baseline">BASELINE</span>`;
+        };
+
+        function gameArtInner(game) { return Shell.gameArtInner(game); }
+        function truncateName(name, max) {
+          max = max || 12;
+          if (!name) return "";
+          return name.length > max ? name.slice(0, max) + "..." : name;
+        }
+        function cardHTML(game, favorites) {
+          return `<article class="game ${game.available ? "" : "unavailable"}">
+            <div class="game-art ${game.art}">
+              ${gameArtInner(game)}
+              ${game.available ? "" : `<span class="unavailable-badge">Unavailable</span>`}
+              <button class="favorite ${favorites.includes(game.id) ? "saved" : ""}" data-favorite="${game.id}" aria-label="Favorite ${game.name}">${svg("heart")}</button>
+              <div class="game-play ${game.available ? "enabled" : ""}">
+                <div class="game-play-name">${game.name}</div>
+                <button class="play-button" data-play="${game.id}" ${game.available ? "" : "disabled"}>${svg("spark")} Play now</button>
+              </div>
+            </div>
+          </article>`;
+        }
+
+        function renderRewards() {
+          window.location.replace("./rewards.html");
+        }
+
+        function renderGamesOrLobby(opts) {
+          const query = state.query.toLowerCase().trim();
+          const favorites = Shell.getFavorites();
+          const list = state.query === "__favorites"
+            ? catalog.filter((game) => favorites.includes(game.id))
+            : catalog.filter((game) => game.name.toLowerCase().includes(query) || game.description.toLowerCase().includes(query));
+          const cards = list.map((game) => cardHTML(game, favorites)).join("");
+          const rankInfo = Shell.rankStats();
+          const profit = history[history.length - 1], isPositive = profit >= 0;
+          const isLobby = state.tab === "Lobby";
+
+          content.innerHTML = `<div class="content">
+            <div class="intro"><div><div class="eyebrow"><i></i> After hours, all yours</div><h1>${isLobby ? "Find your next " : "Pick a game. "}<em>${isLobby ? "bright moment." : "make it glow."}</em></h1></div><p>An original arcade lounge for quick rounds, loud colors, and zero stakes. Pick a game and see where it takes you.</p></div>
+            <div class="shelf-head" style="margin-top:0;"><div></div><label class="search">${svg("grid")}<input placeholder="Search games" value="${state.query === "__favorites" ? "" : state.query}"></label></div>
+
+            ${isLobby ? `
+            <div class="welcome-row">
+              <section class="welcome-card">
+                <h1>Welcome <span>back</span>!</h1>
+                <div class="progress-head"><div class="progress-title">${svg("trend")} Your Progress</div></div>
+                <div class="progress-nums"><strong>${Shell.fmtMoney(rankInfo.totalWagered)}</strong><span>/ ${Shell.fmtMoney(rankInfo.isMax ? rankInfo.floor : rankInfo.ceil)} Wagered</span><span class="progress-pct">${rankInfo.pct.toFixed(0)}%</span></div>
+                <div class="progress-track"><div class="progress-fill" style="width:${rankInfo.pct}%"></div></div>
+                <div class="progress-ranks">
+                  <span class="rank-chip active" style="${rankInfo.tier > 0 ? Shell.rankTextStyle(rankInfo.track) : ""}">${svg("safe")} ${rankInfo.label.toUpperCase()}</span>
+                  <span class="rank-chip">${svg("spark")} ${rankInfo.isMax ? "MAX RANK" : rankInfo.nextLabel.toUpperCase()}</span>
+                </div>
+              </section>
+              <a class="originals-card" href="./index.html?tab=Games" style="text-decoration:none;">
+                <div class="originals-card-tiles">
+                  ${catalog.filter((g) => g.available).slice(0, 4).map((g) => {
+                    const bg = gameArtBg[g.id] || "linear-gradient(145deg,#173a5e,#0f2440)";
+                    return g.image
+                      ? `<div style="background-image:url('${g.image}'); background-size:cover; background-position:center;"></div>`
+                      : `<div style="background:${bg}; display:grid; place-items:center; color:rgba(255,255,255,.55);">${gameArtInner(g)}</div>`;
+                  }).join("")}
+                </div>
+                <div class="originals-card-cta">${svg("grid")} Originals ${svg("chevronDown")}</div>
+              </a>
+            </div>
+            <div class="shelf-head" style="margin-top:0;"><div><h3>Recent Wins</h3><p>Your latest winning rounds.</p></div><span class="panel-micro">YOUR WINS</span></div>
+            <div class="wins-strip">${(() => {
+              const wins = recentWins(40);
+              lastRenderedWins = wins;
+              if (!wins.length) return `<div class="wins-empty">No wins yet — play a round to see it here.</div>`;
+              const rank = Shell.rankStats();
+              const rankStyle = rank.tier > 0 ? Shell.rankTextStyle(rank.track) : "";
+              return wins.map((w, i) => {
+                const hasImage = w.art && w.art.image;
+                const thumb = hasImage
+                  ? `<img class="win-thumb-img" src="${w.art.image}" alt="${w.art.name || ""}" loading="lazy">`
+                  : `<div class="win-thumb-art">${gameArtInner(w.art)}</div>`;
+                return `<div class="win-card" ${w.bet ? `data-win-card="${i}" tabindex="0" role="button"` : ""}>
+                  <div class="win-thumb" style="${hasImage ? "" : `background:${w.bg};`}">${thumb}</div>
+                  <div class="win-meta">
+                    <div class="win-rank" style="${rankStyle}">${svg("safe")}<span class="win-user">${truncateName(w.user)}</span></div>
+                    <div class="win-amt">$${w.amount}</div>
+                  </div>
+                </div>`;
+              }).join("");
+            })()}</div>` : ""}
+
+            <div class="shelf-head"><div><h3>${state.query === "__favorites" ? "Your favorites" : "Original games"}</h3><p>Classic titles. Big atmosphere.</p></div><span class="panel-micro">GAME CATALOG</span></div>
+            <div class="game-grid">${cards || '<div class="game" style="padding:20px;"><strong>No games found</strong></div>'}</div>
+
+            ${isLobby && state.query !== "__favorites" ? `
+            <div class="shelf-head"><div><h3>Slots</h3><p>Spinning reels, coming to the room soon.</p></div><span class="panel-micro">COMING SOON</span></div>
+            <div class="game-grid">${(Array.isArray(window.SLOT_CATALOG) ? window.SLOT_CATALOG : []).map((game) => cardHTML(game, favorites)).join("")}</div>` : ""}
+
+            ${isLobby ? `
+            <div class="bottom bottom-single">
+              <section class="reward reward-wide">
+                <div class="panel-micro">ROOM REWARD · 01</div>
+                <h3>Wager Case</h3>
+                <p>Wager ${Shell.fmtMoney(Shell.RAFFLE_WAGER_STEP)} to earn a free case opening — Mini, Minor, Major, or Grand jackpot. Odds and payouts scale with your rank.</p>
+                <a href="./wheel.html" style="display:inline-block;margin-top:17px;padding:8px 11px;color:#1a1520;background:#ffcf7d;border-radius:7px;font-size:9px;font-weight:800;text-decoration:none;">${Shell.raffleSpinsAvailable() > 0 ? `Open case (${Shell.raffleSpinsAvailable()} available)` : "View wager case"}</a>
+              </section>
+            </div>` : ""}
+
+            <div class="disclaimer">${svg("spark")} Neon Jackpot is a fictional arcade demo. Balance is non-redeemable and has no cash value.</div>
+          </div>`;
+        }
+
+        function render() {
+          Shell.mount({ activeTab: state.tab });
+          Chat.mount();
+          if (state.tab === "Rewards") renderRewards();
+          else renderGamesOrLobby();
+          bind();
+        }
+
+        function bind() {
+          document.querySelectorAll("[data-favorite]").forEach((button) => button.onclick = (e) => {
+            e.preventDefault();
+            Shell.toggleFavorite(button.dataset.favorite);
+            render();
+          });
+          document.querySelectorAll("[data-win-card]").forEach((card) => {
+            const open = () => {
+              const w = lastRenderedWins[parseInt(card.dataset.winCard, 10)];
+              if (w && w.bet) Shell.openBetDetailModal(w.bet, w.label);
+            };
+            card.addEventListener("click", open);
+            card.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+          });
+          const searchInput = document.querySelector(".search input");
+          if (searchInput) {
+            searchInput.addEventListener("input", (event) => {
+              const el = event.target;
+              const pos = el.selectionStart;
+              state.query = el.value;
+              // Only refresh the parts of the page that don't contain this input, so we
+              // never recreate/reset the field the user is actively typing into (that reset
+              // was what caused characters to appear reversed as the cursor jumped to 0).
+              renderGamesOrLobby({ preserveSearchFocus: true });
+              bind();
+              const freshInput = document.querySelector(".search input");
+              if (freshInput) {
+                freshInput.focus();
+                freshInput.setSelectionRange(pos, pos);
+              }
+            });
+          }
+          document.querySelectorAll("[data-play]").forEach((button) => button.onclick = (event) => {
+            event.stopPropagation();
+            const id = button.dataset.play;
+            const game = catalog.find((g) => g.id === id);
+            if (game && game.available) window.location.href = `./${id}.html`;
+          });
+          // favorites rail link stays highlighted only while actually filtering by favorites
+          const favLink = document.querySelector("[data-shell-favorites]");
+          if (favLink) favLink.classList.toggle("active", state.query === "__favorites");
+        }
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

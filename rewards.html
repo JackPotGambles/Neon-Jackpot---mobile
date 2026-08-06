@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Neon Jackpot fictional arcade demo — Rewards" />
+    <title>Rewards · Neon Jackpot</title>
+    <link rel="stylesheet" href="./shell.css" />
+    <style>
+      .content { max-width: 1100px; margin: auto; padding: 34px 32px 60px; }
+      .intro { margin-bottom: 24px; }
+      .eyebrow { display: flex; align-items: center; gap: 8px; color: #ff5c9f; font-family: var(--mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; }
+      .eyebrow i { width: 25px; height: 1px; background: #ff5c9f; }
+      h1 { max-width: 580px; margin: 10px 0 0; font-size: clamp(26px, 3.4vw, 38px); font-weight: 800; letter-spacing: -.05em; line-height: 1; }
+      h1 em { color: var(--mint); font-style: normal; }
+
+      .claim-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 13px; margin-bottom: 22px; }
+      .claim-card { display: flex; flex-direction: column; padding: 16px; background: #121522; border: 1px solid var(--line); border-radius: 14px; min-height: 190px; }
+      .claim-head { display: flex; align-items: flex-start; justify-content: space-between; color: #dbe1ec; font-size: 12.5px; font-weight: 800; }
+      .claim-head span { color: #69758c; font-family: var(--mono); font-size: 9px; font-weight: 600; }
+      .claim-icon-wrap { flex: 1; display: grid; place-items: center; padding: 10px 0; }
+      .claim-icon { display: grid; place-items: center; width: 66px; height: 66px; color: var(--mint); background: rgba(92,255,231,.08); border: 2px solid rgba(92,255,231,.35); border-radius: 50%; font-size: 16px; font-weight: 800; }
+      .claim-icon.locked { color: #69758c; background: rgba(255,255,255,.03); border-color: var(--line); }
+      .claim-icon svg { width: 22px; height: 22px; }
+      .claim-btn { padding: 10px 0; color: #04140f; background: linear-gradient(120deg, #38d787, #63f0ab); border: 0; border-radius: 10px; font-size: 11px; font-weight: 800; }
+      .claim-btn:disabled { color: #6c7488; background: #1b2032; }
+      .claim-btn.lockbtn { color: #8791a6; background: #171a29; border: 1px solid var(--line); }
+
+      .code-panel { padding: 22px 24px; background: #121522; border: 1px solid var(--line); border-radius: 16px; margin-bottom: 22px; }
+      .code-panel h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 16px; }
+      .code-panel p { margin: 0 0 14px; color: #79849b; font-size: 11.5px; }
+      .code-form { display: flex; gap: 8px; max-width: 420px; }
+      .code-form input { flex: 1; padding: 12px 14px; color: var(--text); background: #0c0e18; border: 1px solid var(--line); border-radius: 10px; font-family: var(--mono); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+      .code-form button { padding: 12px 18px; color: #04140f; background: linear-gradient(120deg, #38d787, #63f0ab); border: 0; border-radius: 10px; font-size: 11.5px; font-weight: 800; white-space: nowrap; }
+      .code-msg { margin-top: 10px; font-size: 11.5px; font-weight: 700; }
+      .code-msg.success { color: var(--mint); }
+      .code-msg.error { color: var(--red); }
+
+      .rank-panel { padding: 22px 24px; background: #121522; border: 1px solid var(--line); border-radius: 16px; margin-bottom: 22px; }
+      .rank-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+      .rank-panel-head h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; }
+      .rank-panel-actions { display: flex; gap: 8px; }
+      .rank-panel-actions button, .rank-panel-actions a { padding: 9px 13px; color: #04140f; background: var(--mint); border: 0; border-radius: 9px; font-size: 10.5px; font-weight: 800; }
+      .rank-panel-actions a.secondary { color: #cdd4e2; background: rgba(255,255,255,.05); border: 1px solid var(--line); }
+      .rank-progress-track { position: relative; height: 9px; margin: 12px 0 10px; background: #0c0e18; border-radius: 999px; overflow: hidden; }
+      .rank-progress-fill { height: 100%; background: linear-gradient(90deg, var(--mint), #7ad9ff); border-radius: 999px; }
+      .rank-progress-nums { display: flex; justify-content: space-between; color: #69758c; font-size: 10.5px; }
+      .rank-progress-nums strong { color: #dbe1ec; }
+      .rank-current-row { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
+      .rank-current-row .cur { display: flex; align-items: center; gap: 7px; color: #8791a6; font-family: var(--mono); font-size: 10px; }
+      .rank-current-row .nxt { display: flex; align-items: center; gap: 7px; color: #ffcf7d; font-family: var(--mono); font-size: 10px; }
+
+      .rank-track-scroll { display: flex; gap: 10px; margin-top: 18px; padding-bottom: 6px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+      .rank-track-scroll::-webkit-scrollbar { display: none; }
+      .rank-tier-chip { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 74px; padding: 12px 8px; background: rgba(20,24,40,.55); border: 1px solid var(--line); border-radius: 12px; opacity: .5; }
+      .rank-tier-chip.reached { opacity: 1; }
+      .rank-tier-chip.current { border-color: rgba(92,255,231,.5); background: rgba(92,255,231,.06); box-shadow: 0 0 0 1px rgba(92,255,231,.2); }
+      .rank-tier-diamond { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; transform: rotate(45deg); }
+      .rank-tier-diamond svg { transform: rotate(-45deg); width: 14px; height: 14px; }
+      .rank-tier-chip small { color: #8791a6; font-family: var(--mono); font-size: 8px; text-align: center; line-height: 1.3; }
+      .rank-tier-lock { color: #4c5468; }
+
+      .totals-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 0; background: #121522; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+      .totals-lead { display: flex; flex-direction: column; gap: 4px; padding: 18px 22px; background: rgba(92,255,231,.05); }
+      .totals-lead span { color: #69758c; font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
+      .totals-lead strong { font-size: 20px; color: var(--mint); }
+      .totals-items { display: flex; flex: 1; flex-wrap: wrap; }
+      .totals-item { flex: 1; min-width: 110px; padding: 18px 16px; border-left: 1px solid var(--line); }
+      .totals-item span { display: block; color: #69758c; font-size: 9.5px; }
+      .totals-item strong { display: block; margin-top: 6px; font-size: 13px; }
+
+      @media (max-width: 1000px) { .claim-grid { grid-template-columns: repeat(3, 1fr); } }
+      @media (max-width: 700px) {
+        .content { padding: 24px 16px 40px; }
+        .claim-grid { grid-template-columns: repeat(2, 1fr); }
+        .totals-item { min-width: 90px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="site-shell">
+      <div class="site-grid">
+        <div id="site-sidebar"></div>
+        <div id="site-topbar"></div>
+        <div id="page-content"></div>
+      </div>
+    </div>
+    <script src="./promo-vault.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="./chat.js"></script>
+    <script src="./shell.js"></script>
+    <script src="./games.js"></script>
+    <script>
+      (() => {
+        Shell.mount({ activeTab: "Rewards" });
+        Chat.mount();
+        const content = document.getElementById("page-content");
+        const svg = Shell.svg;
+
+        const CARDS = [
+          { key: "rakeback", icon: "rotate", label: "Rakeback" },
+          { key: "daily", icon: "spark", label: "Daily", sub: "In", cooldownLabel: true },
+          { key: "weekly", icon: "spark", label: "Weekly", sub: "In", cooldownLabel: true },
+          { key: "preMonthly", icon: "spark", label: "Pre-Monthly", sub: "Requires Silver", needsSilver: true },
+          { key: "monthly", icon: "spark", label: "Monthly", sub: "In", cooldownLabel: true },
+        ];
+
+        function claimCardHTML(card) {
+          const stats = Shell.rankStats();
+          const silverUnlocked = stats.tier >= Shell.RANK_TIERS + 1;
+          if (card.key === "rakeback") {
+            const available = Shell.getRakebackAvailable();
+            const ready = available >= 0.01;
+            return `<div class="claim-card">
+              <div class="claim-head">Rakeback<span>${ready ? "Ready" : "Accruing"}</span></div>
+              <div class="claim-icon-wrap"><div class="claim-icon ${ready ? "" : "locked"}">${svg("rotate")}</div></div>
+              <button class="claim-btn" data-claim-rakeback ${ready ? "" : "disabled"}>${ready ? `Claim ${Shell.fmtMoney(available)}` : "Claim"}</button>
+            </div>`;
+          }
+          if (card.noFunds) {
+            return `<div class="claim-card">
+              <div class="claim-head">${card.label}<span>No Funds</span></div>
+              <div class="claim-icon-wrap"><div class="claim-icon locked">${svg("rotate")}</div></div>
+              <button class="claim-btn" disabled>Claim</button>
+            </div>`;
+          }
+          if (card.needsSilver && !silverUnlocked) {
+            return `<div class="claim-card">
+              <div class="claim-head">Pre-Monthly<span>${svg("lock")}</span></div>
+              <div class="claim-icon-wrap"><div class="claim-icon locked">${svg("lock")}</div></div>
+              <button class="claim-btn lockbtn" disabled>Requires Silver</button>
+            </div>`;
+          }
+          const rem = Shell.claimRemaining(card.key);
+          const label = card.label;
+          const amount = Shell.REWARD_AMOUNTS[card.key];
+          if (rem > 0) {
+            return `<div class="claim-card">
+              <div class="claim-head">${label}<span>In ${Shell.fmtCountdown(rem)}</span></div>
+              <div class="claim-icon-wrap"><div class="claim-icon locked">${svg("spark")}</div></div>
+              <button class="claim-btn" disabled>Claim</button>
+            </div>`;
+          }
+          return `<div class="claim-card">
+            <div class="claim-head">${label}<span>Ready</span></div>
+            <div class="claim-icon-wrap"><div class="claim-icon">${svg("spark")}</div></div>
+            <button class="claim-btn" data-claim="${card.key}">Claim $${amount.toFixed(2)}</button>
+          </div>`;
+        }
+
+        function tierChipHTML(tier, stats) {
+          const track = Shell.rankTierTrack(tier);
+          const roman = Shell.rankTierRoman(tier);
+          const reached = tier <= stats.tier;
+          const current = tier === stats.tier && tier > 0;
+          const color = Shell.rankColorFor(track).color;
+          return `<div class="rank-tier-chip ${reached ? "reached" : ""} ${current ? "current" : ""}">
+            <div class="rank-tier-diamond" style="background:${reached ? color : "rgba(20,24,40,.7)"};">
+              ${reached ? svg("spark") : `<span class="rank-tier-lock">${svg("lock")}</span>`}
+            </div>
+            <small>${track}<br>${roman}</small>
+          </div>`;
+        }
+
+        function render() {
+          const stats = Shell.rankStats();
+          const totals = Shell.getClaimTotals();
+          const totalSum = Object.values(totals).reduce((a, b) => a + b, 0);
+
+          const tierChips = [];
+          for (let t = 1; t <= Shell.RANK_TOTAL_TIERS; t++) tierChips.push(tierChipHTML(t, stats));
+
+          content.innerHTML = `<div class="content">
+            <div class="intro">
+              <div class="eyebrow"><i></i> Room rewards</div>
+              <h1>Every drop, <em>in one place.</em></h1>
+            </div>
+
+            <div class="claim-grid">${CARDS.map(claimCardHTML).join("")}</div>
+
+            <div class="code-panel">
+              <h3>${svg("gift")} Claim a code</h3>
+              <p>Got a claim code? Redeem it here for reward balance or wager cases. Reward balance can only be spent on games/slots — wager it through to unlock converting it to cash (see the currency switcher next to your balance).</p>
+              <div class="code-form">
+                <input type="text" placeholder="Enter code" data-code-input maxlength="20" autocomplete="off">
+                <button data-code-submit>Redeem</button>
+              </div>
+              <div class="code-msg" data-code-msg style="display:none;"></div>
+            </div>
+
+            <div class="rank-panel">
+              <div class="rank-panel-head">
+                <h3>${svg("trend")} Your Rank Progress</h3>
+              </div>
+              <div class="rank-progress-track"><div class="rank-progress-fill" style="width:${stats.pct}%"></div></div>
+              <div class="rank-progress-nums"><span><strong>${Shell.fmtMoney(stats.totalWagered)}</strong> / ${Shell.fmtMoney(stats.isMax ? stats.floor : stats.ceil)} Wagered</span><span>${stats.pct.toFixed(0)}% Completed</span></div>
+              <div class="rank-current-row">
+                <span class="cur" style="${stats.tier > 0 ? Shell.rankTextStyle(stats.track) : ""}">${svg("safe")} ${stats.tier === 0 ? "UNRANKED" : stats.label.toUpperCase()}</span>
+                <span class="nxt">${svg("spark")} ${stats.isMax ? "MAX RANK" : stats.nextLabel.toUpperCase()}</span>
+              </div>
+              <div class="rank-track-scroll">${tierChips.join("")}</div>
+            </div>
+
+            <div class="totals-bar">
+              <div class="totals-lead"><span>Total Rewards</span><strong>${Shell.fmtMoney(totalSum)}</strong></div>
+              <div class="totals-items">
+                <div class="totals-item"><span>Daily</span><strong>${Shell.fmtMoney(totals.daily || 0)}</strong></div>
+                <div class="totals-item"><span>Weekly</span><strong>${Shell.fmtMoney(totals.weekly || 0)}</strong></div>
+                <div class="totals-item"><span>Pre-Monthly</span><strong>${Shell.fmtMoney(totals.preMonthly || 0)}</strong></div>
+                <div class="totals-item"><span>Monthly</span><strong>${Shell.fmtMoney(totals.monthly || 0)}</strong></div>
+                <div class="totals-item"><span>Rakeback</span><strong>${Shell.fmtMoney(totals.rakeback || 0)}</strong></div>
+                <div class="totals-item"><span>Ranks</span><strong>$0.00</strong></div>
+                <div class="totals-item"><span>Other Bonuses</span><strong>$0.00</strong></div>
+              </div>
+            </div>
+          </div>`;
+
+          content.querySelectorAll("[data-claim]").forEach((btn) => btn.onclick = () => {
+            const key = btn.dataset.claim;
+            const amount = Shell.claimReward(key);
+            if (amount) {
+              Shell.notify(`Claimed ${Shell.fmtMoney(amount)}.`);
+              Shell.addNotification({ type: "reward", title: `${key.charAt(0).toUpperCase()}${key.slice(1)} bonus claimed`, detail: `+${Shell.fmtMoney(amount)} added to your balance.` });
+              Shell.openClaimResultModal(key.charAt(0).toUpperCase() + key.slice(1) + " Bonus", amount);
+              render();
+            }
+          });
+          const rbBtn = content.querySelector("[data-claim-rakeback]");
+          if (rbBtn) rbBtn.onclick = () => {
+            const amount = Shell.claimRakeback();
+            if (amount) {
+              Shell.notify(`Claimed ${Shell.fmtMoney(amount)} in rakeback.`);
+              Shell.addNotification({ type: "reward", title: "Rakeback claimed", detail: `+${Shell.fmtMoney(amount)} added to your balance.` });
+              Shell.openClaimResultModal("Rakeback", amount);
+              render();
+            }
+          };
+
+          const codeInput = content.querySelector("[data-code-input]");
+          const codeMsg = content.querySelector("[data-code-msg]");
+          const submitCode = () => {
+            const val = codeInput.value;
+            if (!val.trim()) return;
+            const result = Shell.redeemPromoCode(val);
+            codeMsg.style.display = "block";
+            if (result.ok) {
+              codeMsg.className = "code-msg success";
+              const parts = [];
+              if (result.cash) parts.push(`${Shell.fmtMoney(result.cash)} reward balance`);
+              if (result.cases) parts.push(`${result.cases} wager case${result.cases === 1 ? "" : "s"}`);
+              const desc = parts.join(" + ") || "your reward";
+              codeMsg.textContent = `Code redeemed! You received ${desc}.`;
+              Shell.notify(`Code redeemed: +${desc}.`);
+              Shell.addNotification({ type: "reward", title: "Claim code redeemed", detail: `+${desc} added to your account.` });
+              codeInput.value = "";
+              render();
+            } else {
+              codeMsg.className = "code-msg error";
+              codeMsg.textContent = result.reason === "redeemed" ? "Code already redeemed" : "Invalid code.";
+            }
+          };
+          content.querySelector("[data-code-submit]").onclick = submitCode;
+          
+          // Rank track: scrollbar is hidden via CSS, but let vertical wheel scroll it horizontally
+          const rankScroll = content.querySelector(".rank-track-scroll");
+          if (rankScroll) {
+            rankScroll.addEventListener("wheel", (e) => {
+              if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                rankScroll.scrollLeft += e.deltaY;
+                e.preventDefault();
+              }
+            }, { passive: false });
+          }
+          codeInput.addEventListener("keydown", (e) => { if (e.key === "Enter") submitCode(); });
+        }
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

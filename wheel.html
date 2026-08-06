@@ -1,0 +1,856 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Neon Jackpot fictional arcade demo — Wager Case" />
+    <title>Wager Case · Neon Jackpot</title>
+    <link rel="stylesheet" href="./shell.css" />
+    <style>
+      .content { max-width: 1180px; margin: auto; padding: 34px 32px 60px; }
+      .case-top-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: stretch; margin-bottom: 20px; }
+      .intro-card { display: flex; flex-direction: column; justify-content: center; padding: 26px 28px; background: #121522; border: 1px solid var(--line); border-radius: 20px; text-align: left; }
+      .eyebrow { display: flex; align-items: center; gap: 8px; color: #ff5c9f; font-family: var(--mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; }
+      .eyebrow i { width: 25px; height: 1px; background: #ff5c9f; }
+      h1 { margin: 10px 0 0; font-size: clamp(24px, 3vw, 34px); font-weight: 800; letter-spacing: -.05em; line-height: 1; }
+      h1 em { color: var(--mint); font-style: normal; }
+      .intro-card p { max-width: 480px; margin: 12px 0 0; color: #8791a6; font-size: 12px; line-height: 1.6; }
+
+      .recent-win-card { display: flex; flex-direction: column; padding: 20px 22px; background: #121522; border: 1px solid var(--line); border-radius: 20px; }
+      .recent-win-title { display: flex; align-items: center; gap: 7px; color: #dbe1ec; font-size: 12px; font-weight: 800; margin-bottom: 12px; }
+      .recent-win-title svg { width: 14px; height: 14px; color: var(--mint); }
+      .recent-win-body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 6px; }
+      .recent-win-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; background: rgba(255,255,255,.04); color: #69758c; }
+      .recent-win-icon svg { width: 18px; height: 18px; }
+      .recent-win-icon.win { background: rgba(92,255,231,.1); color: var(--mint); }
+      .recent-win-label { font-size: 11px; color: #69758c; font-weight: 700; }
+      .recent-win-amount { font-family: var(--mono); font-size: 18px; font-weight: 800; color: #dbe1ec; }
+      .recent-win-amount.win { color: var(--mint); }
+
+      @media (max-width: 820px) { .case-top-grid { grid-template-columns: 1fr; } }
+
+      .case-card { padding: 30px 28px 28px; background: #121522; border: 1px solid var(--line); border-radius: 20px; }
+
+      /* case-opening reel */
+      .case-reel-wrap { position: relative; height: 180px; margin-bottom: 26px; overflow: hidden; border-radius: 16px; background: linear-gradient(180deg, #0c0e18, #10131f); border: 1px solid var(--line); }
+      .case-reel-marker { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: linear-gradient(180deg, transparent, #ffcf7d, transparent); z-index: 5; box-shadow: 0 0 14px rgba(255,207,125,.8); }
+      .case-reel-marker::before, .case-reel-marker::after { content: ""; position: absolute; left: 50%; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; }
+      .case-reel-marker::before { top: -1px; transform: translateX(-50%); border-top: 10px solid #ffcf7d; }
+      .case-reel-marker::after { bottom: -1px; transform: translateX(-50%); border-bottom: 10px solid #ffcf7d; }
+      .case-reel-fade { position: absolute; top: 0; bottom: 0; width: 90px; z-index: 4; pointer-events: none; }
+      .case-reel-fade.left { left: 0; background: linear-gradient(90deg, #0c0e18, transparent); }
+      .case-reel-fade.right { right: 0; background: linear-gradient(270deg, #0c0e18, transparent); }
+      .case-reel-track { position: absolute; top: 0; left: 50%; height: 100%; display: flex; align-items: center; gap: 12px; padding: 0 12px; will-change: transform; transition: transform 5.2s cubic-bezier(.1,.7,.15,1); }
+      .case-item { position: relative; flex: 0 0 128px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; height: 152px; border-radius: 13px; background: linear-gradient(160deg, rgba(255,255,255,.05), rgba(255,255,255,.01)); border: 1px solid var(--line); }
+      .case-item-icon { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%; }
+      .case-item-icon svg { width: 22px; height: 22px; }
+      .case-item-label { font-size: 10.5px; font-weight: 800; text-align: center; }
+      .case-item-amt { font-family: var(--mono); font-size: 10px; color: #8791a6; }
+      .case-item.tier-none { border-color: var(--line); }
+      .case-item.tier-mini { border-color: rgba(143,224,216,.4); }
+      .case-item.tier-minor { border-color: rgba(58,160,255,.4); }
+      .case-item.tier-major { border-color: rgba(255,92,159,.4); }
+      .case-item.tier-grand { border-color: rgba(255,207,125,.55); box-shadow: 0 0 22px rgba(255,207,125,.18); }
+      .case-item.winner { animation: case-winner-pulse 1s ease .1s 2; }
+      @keyframes case-winner-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+
+      .case-open-row { display: flex; gap: 10px; }
+      .case-open-btn { display: flex; align-items: center; justify-content: center; gap: 9px; flex: 1; padding: 15px 0; color: #04140f; background: linear-gradient(120deg, #38d787, #63f0ab); border: 0; border-radius: 12px; font-size: 13px; font-weight: 800; box-shadow: 0 10px 26px rgba(56,215,135,.3); }
+      .case-open-btn:disabled { color: #6c7488; background: #1b2032; box-shadow: none; }
+      .case-x5-toggle { flex: none; display: flex; align-items: center; justify-content: center; gap: 8px; width: 150px; color: #b6bfd2; background: #171b2c; border: 1px solid var(--line); border-radius: 12px; font-size: 12px; font-weight: 800; }
+      .case-x5-toggle.active { color: #04140f; background: linear-gradient(120deg, #ffcf7d, #ffb45c); border-color: transparent; box-shadow: 0 10px 26px rgba(255,207,125,.28); }
+      .case-x5-toggle:disabled { color: #4c5468; background: rgba(20,23,36,.5); }
+
+      /* Stacked full-width reel lines (one per simultaneous case), instead of small side-by-side
+         boxes. Lane height scales down as lane count grows (via .lanes-N below) so however many
+         lanes are open — 5 by default, up to 10 with the Extra Slots upgrade — all of them stay
+         visible inside the fixed card without pushing the page height down or needing a scroll. */
+      .case-reel-grid { display: flex; flex-direction: column; gap: 7px; margin-bottom: 26px; }
+      .case-reel-grid .case-reel-wrap { height: 78px; margin-bottom: 0; }
+      .case-reel-grid .case-item { flex: 0 0 78px; height: 64px; gap: 4px; }
+      .case-reel-grid .case-item-icon { width: 32px; height: 32px; }
+      .case-reel-grid .case-item-icon svg { width: 14px; height: 14px; }
+      .case-reel-grid .case-item-label { font-size: 8px; }
+      .case-reel-grid .case-item-amt { font-size: 7.2px; }
+      .case-reel-grid .case-reel-fade { width: 26px; }
+
+      /* When more than 5 lanes are showing (Extra Slots upgrade active + batch selected),
+         shrink each lane further so 6-10 lanes occupy roughly the same total height as 5 did. */
+      .case-reel-grid.lanes-many { gap: 4px; }
+      .case-reel-grid.lanes-many .case-reel-wrap { height: 40px; }
+      .case-reel-grid.lanes-many .case-item { flex: 0 0 40px; height: 32px; gap: 2px; }
+      .case-reel-grid.lanes-many .case-item-icon { width: 18px; height: 18px; }
+      .case-reel-grid.lanes-many .case-item-icon svg { width: 9px; height: 9px; }
+      .case-reel-grid.lanes-many .case-item-label { font-size: 6.5px; }
+      .case-reel-grid.lanes-many .case-item-amt { display: none; }
+      .case-reel-grid.lanes-many .case-reel-fade { width: 18px; }
+      .case-reel-grid.lanes-many .case-reel-marker::before, .case-reel-grid.lanes-many .case-reel-marker::after { border-left-width: 5px; border-right-width: 5px; }
+
+      .case-batch-row { display: none; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 16px; }
+      .case-batch-row.show { display: flex; }
+      .case-batch-chip { display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; background: rgba(255,255,255,.03); border: 1px solid var(--line); font-family: var(--mono); font-size: 11px; font-weight: 700; color: #8791a6; opacity: 0; transform: translateY(4px); animation: case-chip-in .25s ease forwards; }
+      .case-batch-chip.win { color: var(--mint); border-color: rgba(92,255,231,.35); }
+      @keyframes case-chip-in { to { opacity: 1; transform: translateY(0); } }
+      .case-batch-total { margin-top: 10px; text-align: center; font-family: var(--mono); font-size: 13px; font-weight: 800; color: var(--mint); display: none; }
+      .case-batch-total.show { display: block; }
+
+      @media (max-width: 700px) {
+        .case-reel-grid { gap: 7px; }
+        .case-reel-grid .case-reel-wrap { height: 64px; }
+        .case-reel-grid .case-item { flex: 0 0 64px; height: 52px; }
+        .case-reel-grid.lanes-many .case-reel-wrap { height: 34px; }
+        .case-reel-grid.lanes-many .case-item { flex: 0 0 34px; height: 28px; }
+      }
+      .case-note { margin-top: 12px; text-align: center; color: #69758c; font-size: 11px; }
+      .case-note strong { color: #dbe1ec; }
+
+      .case-result { display: none; margin: 18px auto 0; padding: 16px 18px; max-width: 320px; background: rgba(255,255,255,.03); border: 1px solid var(--line); border-radius: 14px; text-align: center; }
+      .case-result.show { display: block; animation: case-pop .3s ease; }
+      .case-result-label { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #69758c; }
+      .case-result-value { margin-top: 6px; font-size: 22px; font-weight: 800; }
+      .case-result-value.win { color: var(--mint); }
+      .case-result-value.none { color: #8791a6; }
+      @keyframes case-pop { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+      .case-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 14px; margin-top: 22px; }
+      .case-legend-item { display: flex; align-items: center; gap: 6px; color: #8791a6; font-size: 10.5px; font-weight: 700; }
+      .case-legend-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+
+      .case-back-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 22px; color: #69758c; font-size: 11px; font-weight: 700; }
+      .case-back-link:hover { color: var(--mint); }
+
+      /* case upgrades panel */
+      .case-upgrades-card { margin-top: 20px; padding: 24px 26px 26px; background: #121522; border: 1px solid var(--line); border-radius: 20px; }
+      .case-upgrades-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
+      .case-upgrades-title { display: flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 800; letter-spacing: -.02em; }
+      .case-upgrades-title svg { width: 16px; height: 16px; color: var(--mint); }
+      .case-upgrades-sub { margin: 6px 0 18px; color: #8791a6; font-size: 11.5px; line-height: 1.6; max-width: 640px; }
+      .case-upgrades-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+      @media (max-width: 820px) { .case-upgrades-grid { grid-template-columns: 1fr; } }
+      .case-upgrade-tile { display: flex; flex-direction: column; gap: 10px; padding: 16px; background: rgba(255,255,255,.02); border: 1px solid var(--line); border-radius: 14px; }
+      .case-upgrade-tile-head { display: flex; align-items: center; gap: 10px; }
+      .case-upgrade-tile-icon { display: grid; place-items: center; width: 34px; height: 34px; flex: none; color: var(--mint); background: rgba(92,255,231,.08); border-radius: 9px; }
+      .case-upgrade-tile-icon svg { width: 15px; height: 15px; }
+      .case-upgrade-tile-name { font-size: 12.5px; font-weight: 800; }
+      .case-upgrade-tile-lvl { font-family: var(--mono); font-size: 10px; color: #69758c; }
+      .case-upgrade-tile-desc { color: #8791a6; font-size: 10.5px; line-height: 1.5; min-height: 30px; }
+      .case-upgrade-progress { display: flex; gap: 3px; }
+      .case-upgrade-progress span { flex: 1; height: 5px; border-radius: 3px; background: #1b2032; }
+      .case-upgrade-progress span.filled { background: linear-gradient(90deg, #38d787, #63f0ab); }
+      .case-upgrade-buy { padding: 10px 0; color: #04140f; background: var(--mint); border: 0; border-radius: 9px; font-size: 11px; font-weight: 800; }
+      .case-upgrade-buy:disabled { color: #6c7488; background: #1b2032; }
+      .case-upgrade-tile.maxed { opacity: .75; }
+      .case-upgrade-tile.maxed .case-upgrade-buy { color: #8791a6; background: #171b2c; }
+      .case-upgrade-effect { font-family: var(--mono); font-size: 10px; color: #5cffe7; }
+
+      @media (max-width: 560px) {
+        .content { padding: 24px 16px 40px; }
+        .case-card { padding: 22px 16px 22px; }
+        .case-reel-wrap { height: 150px; }
+        .case-item { flex: 0 0 108px; height: 128px; }
+      }
+
+      /* Open Cases / Combine Cases tab switcher */
+      .case-page-tabs { display: flex; gap: 6px; padding: 4px; margin-bottom: 20px; background: #0c0e18; border: 1px solid var(--line); border-radius: 12px; max-width: 420px; }
+      .case-page-tab { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 10px 0; color: #7c88a0; background: transparent; border: 0; border-radius: 9px; font-size: 12px; font-weight: 800; }
+      .case-page-tab svg { width: 13px; height: 13px; }
+      .case-page-tab.active { color: #04140f; background: #3aa0ff; box-shadow: 0 0 16px rgba(58,160,255,.4); }
+      .case-page-panel { display: none; }
+      .case-page-panel.active { display: block; }
+
+      /* Legendary tier + Combine Cases panel — reuses .case-card/.case-reel-wrap exactly like
+         the Open Cases tab, just recolored to read as a distinct, higher-tier case. */
+      .case-item.tier-legendary { border-color: rgba(255,138,61,.6); box-shadow: 0 0 26px rgba(255,138,61,.22); }
+      .case-result-value.legendary { color: #ff8a3d; }
+      .recent-win-icon.legendary { background: rgba(255,138,61,.12); color: #ff8a3d; }
+      .recent-win-amount.legendary { color: #ff8a3d; }
+
+      .case-reel-wrap.legendary-reel { border-color: rgba(255,138,61,.35); box-shadow: inset 0 0 40px rgba(255,138,61,.06); }
+      .legendary-reel .case-reel-marker { background: linear-gradient(180deg, transparent, #ff8a3d, transparent); box-shadow: 0 0 14px rgba(255,138,61,.8); }
+      .legendary-reel .case-reel-marker::before { border-top-color: #ff8a3d; }
+      .legendary-reel .case-reel-marker::after { border-bottom-color: #ff8a3d; }
+      .legendary-btn { background: linear-gradient(120deg, #ffcf7d, #ff8a3d); box-shadow: 0 10px 26px rgba(255,138,61,.3); }
+      .combine-note { margin-top: 12px; text-align: center; color: #69758c; font-size: 11px; }
+      .combine-note strong { color: #dbe1ec; }
+    </style>
+  </head>
+  <body>
+    <div class="site-shell">
+      <div class="site-grid">
+        <div id="site-sidebar"></div>
+        <div id="site-topbar"></div>
+        <div id="page-content"></div>
+      </div>
+    </div>
+    <script src="./promo-vault.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="./chat.js"></script>
+    <script src="./shell.js"></script>
+    <script src="./games.js"></script>
+    <script>
+      (() => {
+        Shell.mount({ activeTab: "Rewards" });
+        Chat.mount();
+        const content = document.getElementById("page-content");
+        const svg = Shell.svg;
+        const TIERS = Shell.RAFFLE_TIERS; // [{key,label,color}, ...]
+        // Same win tiers as the normal case (minus "no win"), plus Legendary on top — this is
+        // the pool the Combine reel spins through. Landing is always forced onto Legendary, but
+        // showing the full win ladder scrolling past sells the "this is still a real case, it
+        // just can't land on nothing" idea instead of looking like a different mechanic.
+        const WIN_TIERS = TIERS.filter((t) => t.key !== "none").concat([Shell.LEGENDARY_TIER]);
+        let opening = false;
+        let batchSelected = false; // "Open N at once" toggle — expands the case box to N lanes
+        let pageTab = "open"; // "open" | "combine"
+        let combining = false; // true while a Combine Cases legendary reel is animating
+        let combineAutoRolling = false; // Auto Roll toggle for the Combine Cases panel
+
+        // one "display item" per tier, used to build the scrolling reel strip
+        // Tracks the player's most recent case-opening result so the right-hand card can
+        // always show exactly what they won, without needing a full page repaint.
+        let lastWin = null; // { label, amount } | null
+
+        function casesLeftLabel() {
+          const cases = Shell.raffleSpinsAvailable();
+          return cases > 0 ? `<strong>${cases}</strong> case${cases === 1 ? "" : "s"} available` : `Keep wagering — <strong>${Shell.fmtMoney(Shell.RAFFLE_WAGER_STEP)}</strong> wagered earns your next case`;
+        }
+
+        function recentWinCardHTML() {
+          if (!lastWin || !lastWin.label) {
+            return `<div class="recent-win-body">
+              <div class="recent-win-icon">${svg("gift")}</div>
+              <div class="recent-win-label">No cases opened yet</div>
+            </div>`;
+          }
+          const isWin = lastWin.amount > 0;
+          const isLegendary = lastWin.legendary;
+          const cls = isLegendary ? "legendary" : (isWin ? "win" : "");
+          return `<div class="recent-win-body">
+            <div class="recent-win-icon ${cls}">${svg(isLegendary ? "sparkles" : (isWin ? "spark" : "x"))}</div>
+            <div class="recent-win-label">${lastWin.label}</div>
+            <div class="recent-win-amount ${cls}">${isWin ? `+${Shell.fmtMoney(lastWin.amount)}` : "No win"}</div>
+          </div>`;
+        }
+
+        function combineNoteLabel() {
+          const cost = Shell.LEGENDARY_CASE_COST;
+          const cases = Shell.raffleSpinsAvailable();
+          if (cases >= cost) return `<strong>${cases}</strong> case${cases === 1 ? "" : "s"} available — enough to combine`;
+          return `<strong>${cases}</strong> of <strong>${cost}</strong> cases needed to combine`;
+        }
+
+        function renderRecentWin(result) {
+          if (result) lastWin = result;
+          const card = content.querySelector("[data-recent-win-card]");
+          if (card) card.innerHTML = recentWinCardHTML();
+        }
+
+        function tierIcon(key) {
+          return ({ none: "x", mini: "spark", minor: "bolt", major: "sparkles", grand: "gift", legendary: "sparkles" })[key] || "spark";
+        }
+        function displayLabel(t) { return t.key === "none" ? "No win" : t.label; }
+
+        function caseUpgradeSummary() {
+          const u = Shell.getCaseUpgrades();
+          return `Luck Lv${u.luck || 0} · Speed Lv${u.speed || 0}`;
+        }
+
+        function caseUpgradeTilesHTML() {
+          const state = Shell.getCaseUpgrades();
+          const leveledHTML = Shell.CASE_UPGRADES.map((u) => {
+            const lvl = state[u.id] || 0;
+            const maxed = Shell.caseUpgradeMaxed(u.id);
+            const cost = Shell.caseUpgradeCost(u.id);
+            const affordable = !maxed && cost != null && Shell.getCashBalance() >= cost;
+            const pips = Array.from({ length: Shell.CASE_UPGRADE_MAX }, (_, i) => `<span class="${i < lvl ? "filled" : ""}"></span>`).join("");
+            return `<div class="case-upgrade-tile ${maxed ? "maxed" : ""}">
+              <div class="case-upgrade-tile-head">
+                <div class="case-upgrade-tile-icon">${svg(u.icon)}</div>
+                <div>
+                  <div class="case-upgrade-tile-name">${u.name}</div>
+                  <div class="case-upgrade-tile-lvl">Level ${lvl}/${Shell.CASE_UPGRADE_MAX}</div>
+                </div>
+              </div>
+              <div class="case-upgrade-tile-desc">${u.desc}</div>
+              <div class="case-upgrade-progress">${pips}</div>
+              <button class="case-upgrade-buy" data-case-upgrade-buy="${u.id}" ${(affordable && !maxed) ? "" : "disabled"}>${maxed ? "MAX LEVEL" : `Upgrade — ${Shell.fmtMoney(cost)}`}</button>
+            </div>`;
+          }).join("");
+
+          // Extra Slots — a separate, buy-once-and-done upgrade (not leveled 1-10 like the
+          // three above). Raises the "open N at once" batch size from 5 to Shell.CASE_BATCH_MAX.
+          const hasBatchUpgrade = Shell.hasCaseBatchUpgrade();
+          const batchCost = Shell.CASE_BATCH_UPGRADE_COST;
+          const batchAffordable = !hasBatchUpgrade && Shell.getCashBalance() >= batchCost;
+          const extraSlotsHTML = `<div class="case-upgrade-tile ${hasBatchUpgrade ? "maxed" : ""}">
+            <div class="case-upgrade-tile-head">
+              <div class="case-upgrade-tile-icon">${svg("grid")}</div>
+              <div>
+                <div class="case-upgrade-tile-name">Extra Slots</div>
+                <div class="case-upgrade-tile-lvl">${hasBatchUpgrade ? "Unlocked" : `${Shell.CASE_BATCH_BASE} → ${Shell.CASE_BATCH_MAX} at once`}</div>
+              </div>
+            </div>
+            <div class="case-upgrade-tile-desc">One-time upgrade: raises how many cases you can open in a single batch from ${Shell.CASE_BATCH_BASE} to ${Shell.CASE_BATCH_MAX}. Buy once — no levels, no expiry.</div>
+            <div class="case-upgrade-progress"><span class="${hasBatchUpgrade ? "filled" : ""}"></span></div>
+            <button class="case-upgrade-buy" data-case-batch-upgrade-buy ${(batchAffordable && !hasBatchUpgrade) ? "" : "disabled"}>${hasBatchUpgrade ? "UNLOCKED" : `Unlock — ${Shell.fmtMoney(batchCost)}`}</button>
+          </div>`;
+
+          return leveledHTML + extraSlotsHTML;
+        }
+
+        function itemHTML(t, amountLabel, extraClass) {
+          return `<div class="case-item tier-${t.key} ${extraClass || ""}">
+            <div class="case-item-icon" style="background:${t.key === "none" ? "rgba(255,255,255,.05)" : t.color + "22"}; color:${t.key === "none" ? "#8791a6" : t.color};">${svg(tierIcon(t.key))}</div>
+            <div class="case-item-label" style="${t.key !== "none" ? `color:${t.color};` : ""}">${displayLabel(t)}</div>
+            ${amountLabel ? `<div class="case-item-amt">${amountLabel}</div>` : ""}
+          </div>`;
+        }
+
+        function reelWrapHTML(trackAttr, idleStrip) {
+          return `<div class="case-reel-wrap">
+            <div class="case-reel-fade left"></div>
+            <div class="case-reel-fade right"></div>
+            <div class="case-reel-marker"></div>
+            <div class="case-reel-track" ${trackAttr} style="transform: translateX(-50%);">
+              ${idleStrip.map((t) => itemHTML(t)).join("")}
+            </div>
+          </div>`;
+        }
+
+        // Build a long strip of randomized tier items (for visual variety while spinning) with
+        // the actual winning item spliced in at a fixed index so we always land exactly on it.
+        const REEL_LEN = 44;
+        const WINNER_INDEX = 36;
+        function buildReelStrip(winningTier) {
+          const items = [];
+          for (let i = 0; i < REEL_LEN; i++) {
+            if (i === WINNER_INDEX) { items.push(winningTier); continue; }
+            const r = TIERS[Math.floor(Math.random() * TIERS.length)];
+            items.push(r);
+          }
+          return items;
+        }
+        // Same idea as buildReelStrip, but only ever pulls filler items from WIN_TIERS — "no
+        // win" never appears anywhere on this strip, including while it's scrolling past, not
+        // just at the landing spot. That's what makes the Combine case read as guaranteed.
+        function buildWinReelStrip(winningTier) {
+          const items = [];
+          for (let i = 0; i < REEL_LEN; i++) {
+            if (i === WINNER_INDEX) { items.push(winningTier); continue; }
+            const r = WIN_TIERS[Math.floor(Math.random() * WIN_TIERS.length)];
+            items.push(r);
+          }
+          return items;
+        }
+        function combineReelWrapHTML() {
+          const idleStrip = WIN_TIERS.concat(WIN_TIERS).concat(WIN_TIERS);
+          return `<div class="case-reel-wrap legendary-reel">
+            <div class="case-reel-fade left"></div>
+            <div class="case-reel-fade right"></div>
+            <div class="case-reel-marker"></div>
+            <div class="case-reel-track" data-combine-track style="transform: translateX(-50%);">
+              ${idleStrip.map((t) => itemHTML(t)).join("")}
+            </div>
+          </div>`;
+        }
+
+        function paint() {
+          const cases = Shell.raffleSpinsAvailable();
+          const idleStrip = TIERS.concat(TIERS).concat(TIERS); // idle preview, not the real result
+          const batchMax = Shell.caseBatchMax();
+          const canBatch = cases >= batchMax;
+          if (!canBatch) batchSelected = false;
+
+          const reelsHTML = batchSelected
+            ? `<div class="case-reel-grid ${batchMax > 5 ? "lanes-many" : ""}">${Array.from({ length: batchMax }, (_, i) => i).map((i) => reelWrapHTML(`data-case-track-${i}`, idleStrip)).join("")}</div>`
+            : reelWrapHTML(`data-case-track`, idleStrip);
+
+          const legendaryCost = Shell.LEGENDARY_CASE_COST;
+          const canCombine = Shell.canCombineForLegendary();
+
+          content.innerHTML = `<div class="content">
+            <div class="case-page-tabs">
+              <button class="case-page-tab ${pageTab === "open" ? "active" : ""}" data-page-tab="open">${svg("gift")} Open Cases</button>
+              <button class="case-page-tab ${pageTab === "combine" ? "active" : ""}" data-page-tab="combine">${svg("sparkles")} Combine Cases</button>
+            </div>
+
+            <div class="case-page-panel ${pageTab === "open" ? "active" : ""}">
+              <div class="case-top-grid">
+                <div class="intro-card">
+                  <div class="eyebrow"><i></i> Room reward</div>
+                  <h1>Open the <em>wager case.</em></h1>
+                  <p>Every ${Shell.fmtMoney(Shell.RAFFLE_WAGER_STEP)} wagered earns one free case opening. Prizes range from Mini to Grand — but most cases land on "no win." Odds improve with rank, and you can invest cash into Luck and Roll Speed upgrades below to make cases hit more often and land faster.</p>
+                </div>
+                <div class="recent-win-card">
+                  <div class="recent-win-title">${svg("gift")} Recently won</div>
+                  <div data-recent-win-card>${recentWinCardHTML()}</div>
+                </div>
+              </div>
+
+              <div class="case-card">
+                ${reelsHTML}
+
+                <div class="case-open-row">
+                  <button class="case-open-btn" data-case-open ${cases > 0 && !opening ? "" : "disabled"}>${svg("spark")} ${opening ? "Opening…" : (batchSelected ? `Open ${batchMax} cases` : "Open case")}</button>
+                  <button class="case-x5-toggle ${batchSelected ? "active" : ""}" data-case-x5-toggle ${canBatch && !opening ? "" : "disabled"} title="${canBatch ? `Open ${batchMax} cases in one click` : `Requires ${batchMax} cases available`}">${svg("sparkles")} ${batchSelected ? `${batchMax}x selected` : `Open ${batchMax} at once`}</button>
+                  <button class="case-x5-toggle ${autoRolling ? "active" : ""}" data-case-auto-toggle title="When on, keeps opening cases automatically (using the current 1x/batch selection) each time you click Open Case">${svg("rotate")} ${autoRolling ? "Auto Roll: On" : "Auto Roll"}</button>
+                </div>
+                <div class="case-note">${casesLeftLabel()}</div>
+
+                <div class="case-result" data-case-result>
+                  <div class="case-result-label">Result</div>
+                  <div class="case-result-value" data-case-result-value></div>
+                </div>
+
+                <div class="case-batch-row" data-case-batch-row></div>
+                <div class="case-batch-total" data-case-batch-total></div>
+
+                <div class="case-legend">${TIERS.map((t) => `<div class="case-legend-item"><span class="case-legend-dot" style="background:${t.color};"></span>${displayLabel(t)}</div>`).join("")}</div>
+              </div>
+
+              <div class="case-upgrades-card">
+                <div class="case-upgrades-head">
+                  <div class="case-upgrades-title">${svg("sparkles")} Case Upgrades</div>
+                  <div class="case-upgrade-effect">${caseUpgradeSummary()}</div>
+                </div>
+                <p class="case-upgrades-sub">Spend cash to permanently upgrade your wager case, level 1–${Shell.CASE_UPGRADE_MAX} each (plus one buy-once upgrade below). These stack with your rank and never expire.</p>
+                <div class="case-upgrades-grid">${caseUpgradeTilesHTML()}</div>
+              </div>
+            </div>
+
+            <div class="case-page-panel ${pageTab === "combine" ? "active" : ""}">
+              <div class="case-top-grid">
+                <div class="intro-card">
+                  <div class="eyebrow"><i></i> Room reward</div>
+                  <h1>Combine into a <em>bigger case.</em></h1>
+                  <p>Trade in ${legendaryCost} regular case openings for one Combine spin. Same odds curve as a normal case, shifted up a tier: "No win" never lands (Mini takes its place), and Legendary — the new top prize — is exactly as rare as Grand is on a normal case. Nothing here is guaranteed except that you'll walk away with something.</p>
+                </div>
+                <div class="recent-win-card">
+                  <div class="recent-win-title">${svg("gift")} Recently won</div>
+                  <div data-recent-win-card>${recentWinCardHTML()}</div>
+                </div>
+              </div>
+
+              <div class="case-card">
+                ${combineReelWrapHTML()}
+
+                <div class="case-open-row">
+                  <button class="case-open-btn legendary-btn" data-combine-open ${canCombine && !combining ? "" : "disabled"}>${svg("sparkles")} ${combining ? "Combining…" : `Combine ${legendaryCost} cases`}</button>
+                  <button class="case-x5-toggle ${combineAutoRolling ? "active" : ""}" data-combine-auto-toggle title="When on, keeps combining automatically every time you have ${legendaryCost}+ cases available">${svg("rotate")} ${combineAutoRolling ? "Auto Roll: On" : "Auto Roll"}</button>
+                </div>
+                <div class="case-note combine-note">${combineNoteLabel()}</div>
+
+                <div class="case-result" data-combine-result>
+                  <div class="case-result-label">Result</div>
+                  <div class="case-result-value legendary" data-combine-result-value></div>
+                </div>
+
+                <div class="case-legend">${WIN_TIERS.map((t) => `<div class="case-legend-item"><span class="case-legend-dot" style="background:${t.color};"></span>${displayLabel(t)}</div>`).join("")}</div>
+              </div>
+            </div>
+
+            <a class="case-back-link" href="./index.html">${svg("chevronLeft")} Back to lobby</a>
+          </div>`;
+
+          const openBtn = content.querySelector("[data-case-open]");
+          if (openBtn) openBtn.onclick = () => (batchSelected ? doOpenBatch() : doOpen());
+          const x5Btn = content.querySelector("[data-case-x5-toggle]");
+          if (x5Btn) x5Btn.onclick = () => {
+            // Same reasoning as the Auto Roll button below: never call paint() while a round
+            // is opening, or the live "Opening…" button gets detached from the DOM and the
+            // one the player can actually see never gets its label reset — it's stuck showing
+            // "Opening…" forever. This button is `disabled` while opening, but stay defensive
+            // here too rather than relying solely on the disabled attribute.
+            if (opening) return;
+            batchSelected = !batchSelected;
+            paint();
+          };
+          const autoBtn = content.querySelector("[data-case-auto-toggle]");
+          if (autoBtn) autoBtn.onclick = () => {
+            const turningOn = !autoRolling;
+            // Turning Auto Roll on while "Open 5 at once" is selected but the player doesn't
+            // currently have 5 cases available: warn instead of silently flipping the toggle
+            // on and having it immediately fizzle out on the first scheduled cycle.
+            if (turningOn && batchSelected && Shell.raffleSpinsAvailable() < Shell.caseBatchMax()) {
+              Shell.notify(`You don't have enough cases to auto roll ${Shell.caseBatchMax()} at once.`);
+              return;
+            }
+            autoRolling = turningOn;
+            // While a case is actively opening, don't call paint() — that rebuilds the whole
+            // DOM tree, which detaches the exact elements the in-flight doOpen()/doOpenBatch()
+            // setTimeout callback is holding onto. That's what caused the freeze: the button
+            // you SEE gets orphaned mid-"Opening…" while the real update lands on a detached
+            // element nobody can see. Just patch this one button in place instead.
+            if (opening) {
+              autoBtn.classList.toggle("active", autoRolling);
+              autoBtn.innerHTML = `${svg("rotate")} ${autoRolling ? "Auto Roll: On" : "Auto Roll"}`;
+              return;
+            }
+            paint();
+          };
+          content.querySelectorAll("[data-case-upgrade-buy]").forEach((btn) => btn.onclick = () => {
+            if (opening) return;
+            if (Shell.buyCaseUpgrade(btn.dataset.caseUpgradeBuy)) {
+              Shell.playChipSound("select");
+              paint();
+            }
+          });
+          const batchUpgradeBtn = content.querySelector("[data-case-batch-upgrade-buy]");
+          if (batchUpgradeBtn) batchUpgradeBtn.onclick = () => {
+            if (opening) return;
+            if (Shell.buyCaseBatchUpgrade()) {
+              Shell.playChipSound("select");
+              Shell.notify(`Extra Slots unlocked — you can now open ${Shell.CASE_BATCH_MAX} cases at once.`);
+              paint();
+            }
+          };
+          content.querySelectorAll("[data-page-tab]").forEach((btn) => btn.onclick = () => {
+            // Don't allow switching tabs mid-spin/mid-combine — same reasoning as the other
+            // in-flight guards above: paint() would rebuild the DOM out from under a live
+            // setTimeout callback that's holding references to the old elements.
+            if (opening || combining) return;
+            pageTab = btn.dataset.pageTab;
+            paint();
+          });
+          const combineBtn = content.querySelector("[data-combine-open]");
+          if (combineBtn) combineBtn.onclick = () => doCombine();
+          const combineAutoBtn = content.querySelector("[data-combine-auto-toggle]");
+          if (combineAutoBtn) combineAutoBtn.onclick = () => {
+            const turningOn = !combineAutoRolling;
+            if (turningOn && !Shell.canCombineForLegendary()) {
+              Shell.notify(`You don't have enough cases to auto combine yet.`);
+              return;
+            }
+            combineAutoRolling = turningOn;
+            // Same reasoning as the Open Cases Auto Roll toggle: never call paint() while a
+            // combine is actively resolving/animating, since that would rebuild the DOM out
+            // from under the in-flight doCombine() setTimeout callback. Patch the button in
+            // place instead if a combine is currently running.
+            if (combining) {
+              combineAutoBtn.classList.toggle("active", combineAutoRolling);
+              combineAutoBtn.innerHTML = `${svg("rotate")} ${combineAutoRolling ? "Auto Roll: On" : "Auto Roll"}`;
+              return;
+            }
+            paint();
+          };
+        }
+
+        // ---- Combine Cases: burns Shell.LEGENDARY_CASE_COST regular cases for one guaranteed
+        // Legendary win. Reuses the same reel-spin visual language as the main case opener, but
+        // always lands on the Legendary tier since the outcome is guaranteed. ----
+        function doCombine() {
+          if (combining) return;
+          if (!Shell.canCombineForLegendary()) { paint(); return; }
+          if (!content.querySelector("[data-combine-track]")) paint();
+          combining = true;
+
+          const track = content.querySelector("[data-combine-track]");
+          const btn = content.querySelector("[data-combine-open]");
+          const resultBox = content.querySelector("[data-combine-result]");
+          const resultValue = content.querySelector("[data-combine-result-value]");
+          resultBox.classList.remove("show");
+          if (btn) { btn.disabled = true; btn.innerHTML = `${svg("sparkles")} Combining…`; }
+
+          // Resolve the combine now (this immediately deducts the 25 cases inside Shell) —
+          // same "resolve first, animate to match" pattern as doOpen — then reflect the
+          // deduction in the note right away instead of waiting for the reel to land.
+          const result = Shell.combineCasesForLegendary();
+          Shell.playChipSound("select");
+          const noteEl = content.querySelector(".combine-note");
+          if (noteEl) noteEl.innerHTML = combineNoteLabel();
+
+          // The reel must land on whatever tier was actually rolled, not always Legendary —
+          // Legendary is now just as rare here as Grand is on the normal wheel.
+          const wonTierInfo = WIN_TIERS.find((t) => t.key === (result ? result.tier : "mini")) || WIN_TIERS[0];
+          const strip = buildWinReelStrip(wonTierInfo);
+          track.style.transition = "none";
+          track.innerHTML = strip.map((t, i) => itemHTML(t, undefined, i === WINNER_INDEX ? "winner-target" : "")).join("");
+          track.style.transform = "translateX(-50%)";
+          void track.offsetWidth;
+
+          const sampleItem = track.children[0];
+          const itemRect = sampleItem ? sampleItem.getBoundingClientRect() : { width: 128 };
+          const trackStyle = getComputedStyle(track);
+          const trackGap = parseFloat(trackStyle.gap || trackStyle.columnGap) || 12;
+          const trackPadLeft = parseFloat(trackStyle.paddingLeft) || 0;
+          const stride = itemRect.width + trackGap;
+          const targetOffset = -(trackPadLeft + WINNER_INDEX * stride + itemRect.width / 2);
+
+          const spinMs = Shell.caseSpinDurationMs();
+          requestAnimationFrame(() => {
+            track.style.transition = `transform ${spinMs}ms cubic-bezier(.1,.7,.15,1)`;
+            track.style.transform = `translateX(${targetOffset}px)`;
+          });
+
+          setTimeout(() => {
+            combining = false;
+            if (result) {
+              const isLegendary = result.tier === "legendary";
+              resultValue.className = "case-result-value" + (isLegendary ? " legendary" : " win");
+              resultValue.textContent = `${wonTierInfo.label} — +${Shell.fmtMoney(result.amount)}`;
+              resultBox.classList.add("show");
+              const winnerEl = track.children[WINNER_INDEX];
+              if (winnerEl) winnerEl.classList.add("winner");
+              Shell.notify(`${wonTierInfo.label} case! +${Shell.fmtMoney(result.amount)}`);
+              Shell.addNotification({ type: "reward", title: `Wager case — Combine (${wonTierInfo.label})`, detail: `+${Shell.fmtMoney(result.amount)} added to your balance.` });
+              renderRecentWin({ label: `Combine — ${wonTierInfo.label}`, amount: result.amount, legendary: isLegendary });
+            }
+            const canCombineNow = Shell.canCombineForLegendary();
+            if (btn) {
+              btn.disabled = !canCombineNow;
+              btn.innerHTML = `${svg("sparkles")} Combine ${Shell.LEGENDARY_CASE_COST} cases`;
+            }
+            if (noteEl) noteEl.innerHTML = combineNoteLabel();
+            // Also refresh the Open Cases tab's own counter, in case the player switches back
+            // to it without triggering a full repaint some other way first.
+            const openNote = content.querySelector(".case-note");
+            if (openNote) openNote.innerHTML = casesLeftLabel();
+            if (combineAutoRolling) { scheduleNextCombineAutoRoll(); }
+          }, spinMs + 100);
+        }
+
+        // ---- Combine Auto Roll: keeps combining back to back, as long as the toggle is on
+        // and at least LEGENDARY_CASE_COST cases remain available — same pattern as the Open
+        // Cases Auto Roll below. ----
+        function scheduleNextCombineAutoRoll() {
+          if (!combineAutoRolling) return;
+          setTimeout(() => {
+            if (!combineAutoRolling || combining) return;
+            if (Shell.canCombineForLegendary()) { doCombine(); return; }
+            combineAutoRolling = false;
+            paint();
+          }, 500);
+        }
+
+        function doOpen() {
+          if (opening) return;
+          if (Shell.raffleSpinsAvailable() <= 0) { autoRolling = false; paint(); return; }
+          // Defensive: doOpenBatch's completion handler intentionally flips batchSelected back
+          // to false WITHOUT repainting when cases drop under 5 (so the 5 just-landed reels stay
+          // visible instead of snapping back to idle). That means the DOM can still be showing
+          // the 5-lane batch grid at this point, with no single `[data-case-track]` element to
+          // animate — which crashed here before (null.style.transition) and froze the button on
+          // "Opening…" forever. Rebuild the single-lane layout first if it isn't already there.
+          if (!content.querySelector("[data-case-track]")) paint();
+          opening = true;
+
+          // Resolve the actual prize now (Shell's own weighted RNG is the source of truth),
+          // then animate the reel so it visually lands on whichever item matches the result.
+          const result = Shell.spinRaffleWheel();
+          Shell.playChipSound("select");
+          const tierInfo = TIERS.find((t) => t.key === (result ? result.tier : "none"));
+
+          const track = content.querySelector("[data-case-track]");
+          const openBtn = content.querySelector("[data-case-open]");
+          const resultBox = content.querySelector("[data-case-result]");
+          const resultValue = content.querySelector("[data-case-result-value]");
+          resultBox.classList.remove("show");
+          if (openBtn) { openBtn.disabled = true; openBtn.textContent = ""; openBtn.innerHTML = `${svg("spark")} Opening…`; }
+          // Shell.spinRaffleWheel() (called just above) already deducted this case from the
+          // player's available count. Reflect that in the "N cases available" note immediately,
+          // instead of waiting for the reel animation to finish — previously the note only
+          // refreshed in the setTimeout below, so the counter visibly lagged behind the actual
+          // spin for the whole ~5s animation.
+          const noteElNow = content.querySelector(".case-note");
+          if (noteElNow) noteElNow.innerHTML = casesLeftLabel();
+
+          const strip = buildReelStrip(tierInfo);
+          track.style.transition = "none";
+          track.innerHTML = strip.map((t, i) => itemHTML(t, undefined, i === WINNER_INDEX ? "winner-target" : "")).join("");
+          track.style.transform = "translateX(-50%)";
+          // force reflow so the "none" transition actually takes effect before we animate
+          void track.offsetWidth;
+
+          // Measure the actual rendered item width + gap from the DOM instead of assuming a fixed
+          // number — the CSS shrinks items at the mobile breakpoint, so a hardcoded width caused
+          // mismatches at that size. IMPORTANT: the track element itself is CSS-positioned at
+          // `left: 50%`, which already anchors the track's own x=0 (its left padding edge) to the
+          // wrap's horizontal center. The transform below only needs to shift from THAT anchor to
+          // bring the winning item's center under the marker — adding wrapWidth/2 again here would
+          // double-count the centering and land the reel on the wrong item, which is exactly the
+          // bug being fixed.
+          const sampleItem = track.children[0];
+          const itemRect = sampleItem ? sampleItem.getBoundingClientRect() : { width: 128 };
+          const trackStyle = getComputedStyle(track);
+          const trackGap = parseFloat(trackStyle.gap || trackStyle.columnGap) || 12;
+          const trackPadLeft = parseFloat(trackStyle.paddingLeft) || 0;
+          const stride = itemRect.width + trackGap;
+          const targetOffset = -(trackPadLeft + WINNER_INDEX * stride + itemRect.width / 2);
+
+          const spinMs = Shell.caseSpinDurationMs();
+          requestAnimationFrame(() => {
+            track.style.transition = `transform ${spinMs}ms cubic-bezier(.1,.7,.15,1)`;
+            track.style.transform = `translateX(${targetOffset}px)`;
+          });
+
+          setTimeout(() => {
+            opening = false;
+            const isWin = result && result.amount > 0;
+            resultValue.className = "case-result-value " + (isWin ? "win" : "none");
+            resultValue.textContent = isWin ? `${tierInfo.label} — +${Shell.fmtMoney(result.amount)}` : "Better luck next time";
+            resultBox.classList.add("show");
+            const winnerEl = track.children[WINNER_INDEX];
+            if (winnerEl) winnerEl.classList.add("winner");
+            if (isWin) {
+              Shell.notify(`${tierInfo.label} case! +${Shell.fmtMoney(result.amount)}`);
+              Shell.addNotification({ type: "reward", title: `Wager case — ${tierInfo.label}`, detail: `+${Shell.fmtMoney(result.amount)} added to your balance.` });
+            }
+            const casesLeft = Shell.raffleSpinsAvailable();
+            if (openBtn) {
+              openBtn.disabled = casesLeft <= 0;
+              openBtn.innerHTML = `${svg("spark")} Open case`;
+            }
+            const note = content.querySelector(".case-note");
+            if (note) note.innerHTML = casesLeftLabel();
+            if (autoRolling) { scheduleNextAutoRoll(); }
+            renderRecentWin({ label: tierInfo.label, amount: isWin ? result.amount : 0 });
+          }, spinMs + 100);
+        }
+
+        // Opens up to the player's purchased batch max at once (5 by default, 10 with the Extra
+        // Slots upgrade) — each lane spins its own reel simultaneously, all landing together, so
+        // one click resolves the whole batch instead of stepping through them.
+        function doOpenBatch() {
+          if (opening) return;
+          const batchMax = Shell.caseBatchMax();
+          if (Shell.raffleSpinsAvailable() < batchMax) { autoRolling = false; batchSelected = false; paint(); return; }
+          opening = true;
+
+          const openBtn = content.querySelector("[data-case-open]");
+          const x5Btn = content.querySelector("[data-case-x5-toggle]");
+          const resultBox = content.querySelector("[data-case-result]");
+          const batchRow = content.querySelector("[data-case-batch-row]");
+          const batchTotal = content.querySelector("[data-case-batch-total]");
+          resultBox.classList.remove("show");
+          if (batchRow) { batchRow.innerHTML = ""; batchRow.classList.remove("show"); }
+          if (batchTotal) { batchTotal.classList.remove("show"); batchTotal.textContent = ""; }
+          if (openBtn) { openBtn.disabled = true; openBtn.innerHTML = `${svg("spark")} Opening…`; }
+          if (x5Btn) x5Btn.disabled = true;
+
+          const laneCount = Math.min(Shell.caseBatchMax(), Shell.raffleSpinsAvailable());
+          const lanes = Array.from({ length: laneCount }, (_, i) => i).map((i) => {
+            const result = Shell.spinRaffleWheel();
+            const tierInfo = TIERS.find((t) => t.key === (result ? result.tier : "none"));
+            return { i, result, tierInfo };
+          });
+          Shell.playChipSound("select");
+          // Every Shell.spinRaffleWheel() call above already deducted its case from the
+          // player's available count as it ran. Reflect the drop in the "N cases available"
+          // note right away instead of waiting for all reels to finish animating.
+          const noteElNow = content.querySelector(".case-note");
+          if (noteElNow) noteElNow.innerHTML = casesLeftLabel();
+
+          const spinMs = Shell.caseSpinDurationMs();
+          lanes.forEach(({ i, tierInfo }) => {
+            const track = content.querySelector(`[data-case-track-${i}]`);
+            if (!track) return;
+            const strip = buildReelStrip(tierInfo);
+            track.style.transition = "none";
+            track.innerHTML = strip.map((t, idx) => itemHTML(t, undefined, idx === WINNER_INDEX ? "winner-target" : "")).join("");
+            track.style.transform = "translateX(-50%)";
+            void track.offsetWidth;
+
+            const sampleItem = track.children[0];
+            const itemRect = sampleItem ? sampleItem.getBoundingClientRect() : { width: 84 };
+            const trackStyle = getComputedStyle(track);
+            const trackGap = parseFloat(trackStyle.gap || trackStyle.columnGap) || 12;
+            const trackPadLeft = parseFloat(trackStyle.paddingLeft) || 0;
+            const stride = itemRect.width + trackGap;
+            const targetOffset = -(trackPadLeft + WINNER_INDEX * stride + itemRect.width / 2);
+
+            requestAnimationFrame(() => {
+              track.style.transition = `transform ${spinMs}ms cubic-bezier(.1,.7,.15,1)`;
+              track.style.transform = `translateX(${targetOffset}px)`;
+            });
+          });
+
+          setTimeout(() => {
+            opening = false;
+            let totalWin = 0;
+            lanes.forEach(({ i, result, tierInfo }) => {
+              const isWin = result && result.amount > 0;
+              if (isWin) totalWin += result.amount;
+              const track = content.querySelector(`[data-case-track-${i}]`);
+              const winnerEl = track ? track.children[WINNER_INDEX] : null;
+              if (winnerEl) winnerEl.classList.add("winner");
+              if (batchRow) {
+                const chip = document.createElement("div");
+                chip.className = "case-batch-chip" + (isWin ? " win" : "");
+                chip.textContent = `#${i + 1} — ${isWin ? `${tierInfo.label} +${Shell.fmtMoney(result.amount)}` : "No win"}`;
+                batchRow.appendChild(chip);
+              }
+            });
+            if (batchRow) batchRow.classList.add("show");
+            if (batchTotal) {
+              batchTotal.textContent = totalWin > 0 ? `Batch total: +${Shell.fmtMoney(totalWin)}` : "Batch total: no wins this round";
+              batchTotal.classList.add("show");
+            }
+            if (totalWin > 0) {
+              Shell.notify(`${laneCount} cases opened — +${Shell.fmtMoney(totalWin)} total`);
+              Shell.addNotification({ type: "reward", title: `Wager case — ${laneCount}x batch`, detail: `+${Shell.fmtMoney(totalWin)} added to your balance.` });
+            }
+            // IMPORTANT: do NOT call paint() here — paint() rebuilds every reel track from
+            // scratch back to its generic idle strip, which wipes out the landed result on
+            // each of the 5 lanes (they'd all visually snap back to whatever tier happens to
+            // sit at the idle strip's center, which looked like every lane "defaulting" to
+            // Minor). Instead, only refresh the bits that actually need to change: the case
+            // counter/note text, the open/x5 button states, and the recent-win display —
+            // leaving the 5 landed reels exactly where they visually stopped.
+            const noteEl = content.querySelector(".case-note");
+            if (noteEl) noteEl.innerHTML = casesLeftLabel();
+            const openBtnEl = content.querySelector("[data-case-open]");
+            const casesNow = Shell.raffleSpinsAvailable();
+            const batchMaxNow = Shell.caseBatchMax();
+            if (openBtnEl) {
+              openBtnEl.disabled = casesNow <= 0;
+              openBtnEl.innerHTML = `${svg("spark")} ${batchSelected ? `Open ${batchMaxNow} cases` : "Open case"}`;
+            }
+            // If the player no longer has enough cases for a full batch, force the "open N at
+            // once" selection back off — otherwise batchSelected stayed true in memory (paint()
+            // is deliberately not called here) and the next click of the main Open button would
+            // try to run the batch flow again with too few cases, silently doing nothing.
+            if (casesNow < batchMaxNow) batchSelected = false;
+            const x5BtnEl = content.querySelector("[data-case-x5-toggle]");
+            if (x5BtnEl) {
+              x5BtnEl.disabled = casesNow < batchMaxNow;
+              x5BtnEl.classList.toggle("active", batchSelected);
+              x5BtnEl.innerHTML = `${svg("sparkles")} ${batchSelected ? `${batchMaxNow}x selected` : `Open ${batchMaxNow} at once`}`;
+            }
+            if (autoRolling) { scheduleNextAutoRoll(); }
+            renderRecentWin(totalWin > 0 ? { label: `${laneCount}x batch`, amount: totalWin } : { label: `${laneCount}x batch — no wins`, amount: 0 });
+          }, spinMs + 100);
+        }
+
+        // ---- Auto Roll: keeps opening cases (respecting the current 1x/5x selection) back to
+        // back, as long as the toggle is on and enough cases remain available. ----
+        let autoRolling = false;
+        function scheduleNextAutoRoll() {
+          if (!autoRolling) return;
+          setTimeout(() => {
+            if (!autoRolling || opening) return;
+            const cases = Shell.raffleSpinsAvailable();
+            const batchMax = Shell.caseBatchMax();
+            if (batchSelected && cases >= batchMax) { doOpenBatch(); return; }
+            // If "Open N at once" is selected but the pile has dropped under the batch size
+            // mid-auto-roll, don't attempt another batch (that's what caused the original bug)
+            // — instead drop out of batch mode and keep the auto roll going one case at a time.
+            if (batchSelected && cases < batchMax && cases >= 1) {
+              batchSelected = false;
+              Shell.notify(`Fewer than ${batchMax} cases left — switching auto roll to 1x.`);
+              paint();
+              doOpen();
+              return;
+            }
+            if (!batchSelected && cases >= 1) { doOpen(); return; }
+            autoRolling = false;
+            batchSelected = false;
+            paint();
+          }, 500);
+        }
+
+        paint();
+      })();
+    </script>
+  </body>
+</html>

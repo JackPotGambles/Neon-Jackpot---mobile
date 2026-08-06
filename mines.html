@@ -1,0 +1,759 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Neon Jackpot fictional arcade demo — Mines" />
+    <title>Mines · Neon Jackpot</title>
+    <link rel="stylesheet" href="./shell.css" />
+    <link rel="stylesheet" href="./game-frame.css" />
+    <style>
+      /* ---- stage ---- */
+      .game-box.mines-stage {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        padding: 16px;
+        background: linear-gradient(160deg, #182d42, #16203d 56%, #321849);
+        position: relative;
+      }
+      .mines-board-wrap { width: 100%; height: 100%; display: grid; place-items: center; }
+      .mines-board {
+        position: relative;
+        display: grid;
+        gap: 8px;
+        width: 100%;
+        height: 100%;
+        max-width: min(460px, 100%);
+        max-height: min(460px, 100%);
+        aspect-ratio: 1 / 1;
+      }
+      .mines-tile {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        overflow: visible;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.14);
+        background: linear-gradient(160deg, #2a2f52, #201f3e 70%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+      }
+      .mines-tile.clickable { cursor: pointer; transition: transform .1s ease, background .15s ease, border-color .15s ease; }
+      .mines-tile.clickable:hover { transform: translateY(-2px); border-color: rgba(92,255,231,.45); background: linear-gradient(160deg, #333a63, #262649 70%); }
+      .mines-tile .mtile-icon { font-size: clamp(14px, 4.4vw, 26px); }
+      .mines-tile.revealed.gem { background: radial-gradient(circle at 35% 30%, #d8fff6, var(--mint) 75%); border-color: var(--mint); box-shadow: 0 0 14px rgba(92,255,231,.4); }
+      .mines-tile.revealed.mine { background: radial-gradient(circle at 35% 30%, #ff9a7d, var(--red) 75%); border-color: var(--red); box-shadow: 0 0 14px rgba(255,110,143,.45); }
+      .mines-tile.revealed.mine.dim { opacity: .55; box-shadow: none; }
+      .mines-tile.revealed.gem.just-revealed { animation: mines-pop .25s ease; }
+      .mines-tile.revealed.mine.just-revealed { animation: mines-shake .35s ease; }
+      @keyframes mines-pop { 0% { transform: scale(.6); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
+      @keyframes mines-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-3px) rotate(-3deg); } 40% { transform: translateX(3px) rotate(3deg); } 60% { transform: translateX(-2px); } 80% { transform: translateX(2px); } }
+      .no-animations .mines-tile, .no-animations .mines-tile.clickable:hover { transition: none !important; animation: none !important; transform: none !important; }
+
+      .mines-bubble-cell { position: absolute; pointer-events: none; z-index: 30; }
+      .mines-tile-bubble {
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-top: 5px;
+        transform: translateX(-50%);
+        padding: 3px 9px;
+        color: #04140f;
+        background: linear-gradient(120deg, #3aa0ff, #5cffe7);
+        border-radius: 999px;
+        font-family: var(--mono);
+        font-size: clamp(8px, 2vw, 11px);
+        font-weight: 800;
+        white-space: nowrap;
+        pointer-events: none;
+        animation: mines-bubble 1s ease forwards;
+      }
+      @keyframes mines-bubble {
+        0% { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+        10% { opacity: 1; transform: translateX(-50%) translateY(0); }
+        85% { opacity: 1; }
+        100% { opacity: 0; transform: translateX(-50%) translateY(2px); }
+      }
+      .no-animations .mines-tile-bubble { animation: none !important; opacity: 0; }
+
+      .mines-result-overlay {
+        position: absolute; inset: 0; z-index: 5;
+        display: grid; place-items: center;
+        background: rgba(8, 9, 16, .62);
+        backdrop-filter: blur(1.5px);
+        border-radius: inherit;
+        animation: mines-overlay-in .18s ease;
+        cursor: pointer;
+      }
+      @keyframes mines-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+      .mines-result-card {
+        display: flex; flex-direction: column; align-items: center; gap: 6px;
+        padding: 22px 34px; background: #171c2c; border: 1px solid var(--line); border-radius: 16px;
+        box-shadow: 0 20px 50px rgba(0,0,0,.45);
+        cursor: default;
+      }
+      .mines-result-card.win { border-color: rgba(92,255,231,.5); }
+      .mines-result-mult { font-family: var(--mono); font-size: 26px; font-weight: 800; color: var(--mint); }
+      .mines-result-amt { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--mint); }
+
+      /* ---- sidebar: grid size buttons ---- */
+      .mines-size-row { display: flex; gap: 6px; }
+      .mines-size-btn { flex: 1; padding: 9px 0; color: #7c88a0; background: #0c0e18; border: 1px solid var(--line); border-radius: 9px; font-size: 12px; font-weight: 800; }
+      .mines-size-btn.active { color: #04140f; background: #3aa0ff; border-color: transparent; box-shadow: 0 0 16px rgba(58,160,255,.35); }
+      .mines-size-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+      /* ---- sidebar: gem/bomb dual-color slider ---- */
+      .mines-slider-row { display: flex; align-items: center; gap: 8px; }
+      .mines-pill { display: flex; align-items: center; gap: 6px; padding: 8px 10px; background: #0c0e18; border: 1px solid var(--line); border-radius: 9px; font-family: var(--mono); font-size: 12px; font-weight: 700; flex: none; width: 68px; box-sizing: border-box; justify-content: center; }
+      .mines-pill .picon { font-size: 13px; }
+      .mines-pill.gems strong { color: var(--mint); }
+      .mines-pill.bombs strong { color: var(--red); }
+
+      .mines-track-wrap { position: relative; flex: 1; height: 36px; display: flex; align-items: center; padding: 0 14px; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; }
+      .mines-track-bg { position: absolute; left: 14px; right: 14px; height: 10px; border-radius: 999px; overflow: hidden; display: flex; }
+      .mines-track-gems, .mines-track-bombs { height: 100%; }
+      .mines-track-gems { background: linear-gradient(90deg, #3aa0ff, #5cffe7); }
+      .mines-track-bombs { background: linear-gradient(90deg, #ff6e8f, #ff3d5e); }
+      .mines-range { position: relative; z-index: 2; width: 100%; height: 36px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+      .mines-range::-webkit-slider-runnable-track { -webkit-appearance: none; height: 36px; background: transparent; }
+      .mines-range::-moz-range-track { height: 36px; background: transparent; border: 0; }
+      .mines-range::-webkit-slider-thumb {
+        -webkit-appearance: none; width: 22px; height: 22px; margin-top: 0;
+        background: #eef3f8; border: 3px solid #0c0e18; border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(0,0,0,.4); cursor: pointer;
+      }
+      .mines-range::-moz-range-thumb { width: 22px; height: 22px; background: #eef3f8; border: 3px solid #0c0e18; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,.4); cursor: pointer; }
+      .mines-range:disabled { cursor: not-allowed; }
+
+      /* ---- profit box (matches Dragon Tower pattern) ---- */
+      .profit-box { margin-top: 14px; background: rgba(255,255,255,.03); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+      .profit-box-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; }
+      .profit-box-col { display: flex; flex-direction: column; gap: 3px; }
+      .profit-box-col.right { align-items: flex-end; }
+      .profit-box-col span { font-size: 10px; color: #69758c; }
+      .profit-box-col strong { font-family: var(--mono); font-size: 13px; }
+      .profit-box-col.left strong { color: var(--mint); }
+      .profit-box-chevron { color: #4c5468; }
+      .profit-box-bottom { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 0; background: rgba(0,0,0,.15); font-family: var(--mono); font-size: 11px; font-weight: 700; }
+      .profit-box-bottom .cur { color: var(--mint); }
+      .profit-box-bottom .divider { color: #3a4256; }
+      .profit-box-bottom .nxt { color: #8791a6; }
+
+      .mines-cashout-btn {
+        width: 100%; padding: 14px 0; color: #04140f;
+        background: linear-gradient(120deg, #38d787, #63f0ab); border: 0; border-radius: 12px;
+        font-size: 13px; font-weight: 800;
+      }
+      .mines-cashout-btn:disabled { color: #6c7488; background: #1b2032; }
+
+      .mines-random-btn {
+        width: 100%; padding: 12px 0; color: var(--text);
+        background: #1b2032; border: 1px solid var(--line); border-radius: 12px;
+        font-size: 12.5px; font-weight: 700;
+      }
+      .mines-random-btn:hover:not(:disabled) { border-color: rgba(92,255,231,.35); color: var(--mint); }
+      .mines-random-btn:disabled { color: #55617a; cursor: not-allowed; }
+    </style>
+  </head>
+  <body>
+    <div class="site-shell">
+      <div class="site-grid">
+        <div id="site-sidebar"></div>
+        <div id="site-topbar"></div>
+        <div id="page-content"></div>
+      </div>
+    </div>
+    <script src="./promo-vault.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="./chat.js"></script>
+    <script src="./shell.js"></script>
+    <script src="./games.js"></script>
+    <script>
+      (() => {
+        const GAME_NAME = "Mines";
+        const GAME_ID = "mines";
+
+        Shell.mount({ activeTab: "Games" });
+        Chat.mount();
+        document.addEventListener("nj:animations", (e) => { state.settings.animations = !e.detail; render(); });
+        const content = document.getElementById("page-content");
+        const svg = Shell.svg;
+
+        const GRID_SIZES = [25, 36, 49, 64];
+        const HOUSE_RTP = 0.96;
+        const DEFAULT_RATIO = 8 / 25; // matches the reference default: 8 mines on a 25-tile grid
+
+        // ---------------------------------------------------------------
+        // MULTIPLIER MATH — exact hypergeometric / 96% RTP engine, floor-
+        // rounded to 2 decimals (never standard rounding), clamped so an
+        // early pick can never compute under 1.00x.
+        // ---------------------------------------------------------------
+        function multiplierFor(gridSize, mines, picks) {
+          if (picks <= 0) return 1;
+          let prob = 1;
+          let tilesRemaining = gridSize;
+          let gemsRemaining = gridSize - mines;
+          for (let i = 0; i < picks; i++) {
+            if (gemsRemaining <= 0 || tilesRemaining <= 0) return 1;
+            prob *= gemsRemaining / tilesRemaining;
+            tilesRemaining--;
+            gemsRemaining--;
+          }
+          const raw = HOUSE_RTP / prob;
+          let mult = Math.floor(raw * 100) / 100;
+          if (mult < 1) mult = 1;
+          return mult;
+        }
+
+        // ---------------------------------------------------------------
+        // sound: only two effects — a win ding (shared Shell.playWinDing)
+        // on a gem, and an explosion burst on a mine. No other sounds.
+        // ---------------------------------------------------------------
+        let audioCtx = null;
+        const getCtx = () => { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); return audioCtx; };
+        function playExplosion(volumePct) {
+          const v = volumePct / 100;
+          if (v <= 0) return;
+          try {
+            const ctx = getCtx();
+            const now = ctx.currentTime;
+            const dur = 0.5;
+            // low rumbling noise burst
+            const bufferSize = Math.floor(ctx.sampleRate * dur);
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 1.5);
+            const noise = ctx.createBufferSource();
+            noise.buffer = buffer;
+            const lowpass = ctx.createBiquadFilter();
+            lowpass.type = "lowpass";
+            lowpass.frequency.setValueAtTime(900, now);
+            lowpass.frequency.exponentialRampToValueAtTime(120, now + dur);
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.55 * v, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+            noise.connect(lowpass).connect(g).connect(ctx.destination);
+            noise.start(now);
+            noise.stop(now + dur);
+            // low thump
+            const osc = ctx.createOscillator();
+            const og = ctx.createGain();
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(140, now);
+            osc.frequency.exponentialRampToValueAtTime(40, now + 0.3);
+            og.gain.setValueAtTime(0.5 * v, now);
+            og.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+            osc.connect(og).connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.32);
+          } catch {}
+        }
+
+        const state = {
+          betAmount: "",
+          busy: false,
+          infoOpen: false,
+          fairPlayOpen: false,
+          settingsOpen: false,
+          statsOpen: false,
+          statsGame: "all",
+          statsGameDropdownOpen: false,
+          statsDrag: null,
+          statsPos: null,
+          favorite: Shell.getFavorites().includes(GAME_ID),
+          settings: { animations: !Shell.isAnimationsDisabled(), volume: 100 },
+
+          gridSize: 25,
+          mineCount: 8,
+          active: false,
+          betAmt: 0,
+          tiles: null,       // array of "gem" | "mine", length gridSize
+          revealed: null,    // array of booleans
+          picks: 0,          // gems successfully revealed so far
+          showResultOverlay: false,
+          lastResult: null,
+          animatedTiles: new Set(),
+          bustedTile: null,
+          bubbleTile: null,
+          bubbleMult: null,
+          lastPickedTile: null,
+          clickedTiles: new Set(), // indices actually clicked (not the whole mine field swept in on bust) — used for the bet detail snapshot
+        };
+
+        function buildTiles(gridSize, mines) {
+          const arr = new Array(gridSize).fill("gem");
+          const mineSpots = new Set();
+          while (mineSpots.size < mines) mineSpots.add(Math.floor(Math.random() * gridSize));
+          mineSpots.forEach((i) => (arr[i] = "mine"));
+          return arr;
+        }
+
+        function buildBetDetail() {
+          // Cashing out (or busting) reveals the WHOLE board — every gem and mine location —
+          // same as Rainbet. The tile the player actually clicked last is highlighted so it's
+          // clear which reveal ended the round; everything else is shown at full visibility too.
+          const cols = Math.round(Math.sqrt(state.gridSize)) || 5;
+          const lastPicked = state.bustedTile != null ? state.bustedTile : state.lastPickedTile;
+          const cells = state.tiles.map((t, i) => ({
+            state: t === "mine" ? "hit" : "safe",
+            picked: i === lastPicked,
+            wasRevealed: true,
+          }));
+          return { type: "grid", cols, cells };
+        }
+
+        function recordBet(betAmount, result) {
+          Shell.addBetEntry({ game: GAME_ID, bet: betAmount, won: result.won, profit: result.profit, detail: buildBetDetail() });
+          // Stake was already deducted up front in startRound(). On a win, credit the FULL
+          // payout (stake + profit); on a loss, nothing further is credited.
+          if (result.won) Shell.addBalance(betAmount + result.profit);
+        }
+
+        function persistRound() {
+          if (!state.active) { Shell.clearActiveRound(GAME_ID); return; }
+          Shell.saveActiveRound(GAME_ID, {
+            gridSize: state.gridSize, mineCount: state.mineCount, betAmt: state.betAmt,
+            tiles: state.tiles, revealed: state.revealed, picks: state.picks,
+          });
+        }
+
+        function startRound() {
+          if (state.busy || state.active) return;
+          const raw = parseFloat(state.betAmount);
+          let amt = state.betAmount !== "" && !isNaN(raw) && raw > 0 ? Math.round(raw * 100) / 100 : 0;
+          const balance = Shell.getBalance();
+          if (amt > 0 && Shell.isBelowMinBet(amt)) { Shell.notify(`Minimum bet is ${Shell.fmtMoney(Shell.MIN_BET)}.`); return; }
+          if (amt > 0 && (balance <= 0 || amt > balance)) { Shell.notify("Insufficient balance."); return; }
+          amt = Math.min(amt, balance);
+
+          if (amt > 0) Shell.addBalance(-amt);
+          state.active = true;
+          state.betAmt = amt;
+          state.tiles = buildTiles(state.gridSize, state.mineCount);
+          state.revealed = new Array(state.gridSize).fill(false);
+          state.demoTiles = null;
+          state.picks = 0;
+          state.lastResult = null;
+          state.showResultOverlay = false;
+          state.animatedTiles.clear();
+          state.bustedTile = null;
+          state.bubbleTile = null;
+          state.bubbleMult = null;
+          state.lastPickedTile = null;
+          state.clickedTiles.clear();
+          persistRound();
+          render();
+        }
+
+        function pickTile(idx) {
+          if (state.busy || !state.active) return;
+          if (state.revealed[idx]) return;
+
+          const outcome = state.tiles[idx];
+          state.revealed[idx] = true;
+          state.lastPickedTile = idx;
+          state.clickedTiles.add(idx);
+
+          if (outcome === "mine") {
+            // reveal the entire board — every mine AND every gem location — same as a cash-out.
+            state.bustedTile = idx;
+            state.bubbleTile = null;
+            state.tiles.forEach((t, i) => { state.revealed[i] = true; });
+            playExplosion(state.settings.volume);
+            const result = { won: false, profit: -state.betAmt, payout: 0, payoutLabel: "0.00x" };
+            recordBet(state.betAmt, result);
+            state.lastResult = result;
+            state.active = false;
+            state.showResultOverlay = true;
+            Shell.clearActiveRound(GAME_ID);
+            render();
+            return;
+          }
+
+          Shell.playWinDing(state.settings.volume);
+          state.picks += 1;
+          state.bubbleTile = idx;
+          state.bubbleMult = multiplierFor(state.gridSize, state.mineCount, state.picks);
+          const totalGems = state.gridSize - state.mineCount;
+          if (state.picks >= totalGems) {
+            // every gem has been found — no winning tiles remain, round auto-completes
+            cashOut(true);
+            return;
+          }
+          persistRound();
+          render();
+        }
+
+        function pickRandomTile() {
+          if (state.busy || !state.active) return;
+          const options = [];
+          for (let i = 0; i < state.gridSize; i++) if (!state.revealed[i]) options.push(i);
+          if (!options.length) return;
+          const idx = options[Math.floor(Math.random() * options.length)];
+          pickTile(idx);
+        }
+
+        function cashOut(auto) {
+          if (!state.active || state.picks < 1) return;
+          const mult = multiplierFor(state.gridSize, state.mineCount, state.picks);
+          const payout = state.betAmt * mult;
+          const result = { won: true, profit: payout - state.betAmt, payout, payoutLabel: `${mult.toFixed(2)}x` };
+          recordBet(state.betAmt, result);
+          state.lastResult = result;
+          // Reveal the entire board — every mine AND every gem location — same as a bust.
+          state.tiles.forEach((t, i) => { state.revealed[i] = true; });
+          state.active = false;
+          state.busy = false;
+          state.showResultOverlay = true;
+          Shell.clearActiveRound(GAME_ID);
+          render();
+        }
+
+        function dismissResultOverlay(e) {
+          if (e && e.target.closest(".mines-result-card")) return;
+          if (!state.showResultOverlay) return;
+          state.showResultOverlay = false;
+          render();
+        }
+
+        function tileHTML(idx, revealed, outcome, active) {
+          const key = String(idx);
+          const cls = ["mines-tile"];
+          if (active && !revealed) cls.push("clickable");
+          let icon = "";
+          if (revealed) {
+            cls.push("revealed", outcome);
+            if (outcome === "mine" && idx !== state.bustedTile) cls.push("dim");
+            if (!state.animatedTiles.has(key)) cls.push("just-revealed");
+            icon = outcome === "mine" ? `<span class="mtile-icon">💣</span>` : `<span class="mtile-icon">💎</span>`;
+          }
+          return `<div class="${cls.join(" ")}" ${active && !revealed ? `data-mines-tile="${idx}"` : ""}>${icon}</div>`;
+        }
+
+        function gridHTML() {
+          const gridSize = state.gridSize;
+          // Use a cached, stable demo board when no round is active — calling buildTiles()
+          // fresh on every render (which happens on every keystroke, hover, slider drag,
+          // etc.) was re-shuffling mine positions constantly, making the grid look like it
+          // was "scrambling" on any interaction. Only regenerate the demo board when the
+          // grid size actually changes.
+          if (!state.tiles && (!state.demoTiles || state.demoTiles.length !== gridSize)) {
+            state.demoTiles = buildTiles(gridSize, state.mineCount);
+          }
+          const tiles = state.tiles || state.demoTiles;
+          const revealed = state.revealed || new Array(gridSize).fill(false);
+          const cols = Math.round(Math.sqrt(gridSize));
+          const parts = [];
+          for (let i = 0; i < gridSize; i++) parts.push(tileHTML(i, revealed[i], tiles[i], state.active));
+          for (let i = 0; i < gridSize; i++) if (revealed[i]) state.animatedTiles.add(String(i));
+          // The bubble is absolutely positioned over the board (not a grid item), so it can
+          // never perturb grid auto-placement of the real tiles. It's sized/positioned as a
+          // percentage of the board to land exactly over the cell it belongs to, including
+          // the gap between cells.
+          let bubbleHTML = "";
+          if (state.bubbleTile !== null && state.settings.animations) {
+            const row = Math.floor(state.bubbleTile / cols);
+            const col = state.bubbleTile % cols;
+            const cellPct = 100 / cols;
+            bubbleHTML = `<div class="mines-bubble-cell" style="top:${row * cellPct}%;left:${col * cellPct}%;width:${cellPct}%;height:${cellPct}%;">
+              <div class="mines-tile-bubble">${state.bubbleMult.toFixed(2)}x</div>
+            </div>`;
+          }
+          return `<div class="mines-board" style="grid-template-columns:repeat(${cols}, 1fr);grid-template-rows:repeat(${cols}, 1fr);">${parts.join("")}${bubbleHTML}</div>`;
+        }
+
+        function resultOverlayHTML(r) {
+          return `<div class="mines-result-overlay" data-result-overlay>
+            <div class="mines-result-card win">
+              <div class="mines-result-mult">${r.payoutLabel}</div>
+              <div class="mines-result-amt">+${Shell.fmtMoney(r.payout)}</div>
+            </div>
+          </div>`;
+        }
+
+        function render() {
+          const balance = Shell.getBalance();
+          const betRaw = parseFloat(state.betAmount);
+          const hasBet = state.betAmount !== "" && !isNaN(betRaw) && betRaw > 0;
+          const demoMode = !state.active && !hasBet;
+          const insufficientBalance = !state.active && hasBet && betRaw > balance;
+          const belowMinBet = !state.active && hasBet && Shell.isBelowMinBet(betRaw);
+          const totalGems = state.gridSize - state.mineCount;
+          const canCashOut = state.active && state.picks >= 1 && !state.busy;
+          const currentMult = state.active && state.picks >= 1 ? multiplierFor(state.gridSize, state.mineCount, state.picks) : 1;
+          const currentProfit = state.active && state.picks >= 1 ? state.betAmt * currentMult - state.betAmt : 0;
+          const nextPicks = (state.active ? state.picks : 0) + 1;
+          const nextMult = nextPicks <= totalGems ? multiplierFor(state.gridSize, state.mineCount, nextPicks) : currentMult;
+          const previewBet = state.active ? state.betAmt : (parseFloat(state.betAmount) || 0);
+          const nextProfit = previewBet > 0 ? previewBet * nextMult - previewBet : 0;
+          const r = state.lastResult;
+          const won = r ? r.won : null;
+          const sliderMax = state.gridSize - 1;
+          const rawSliderPercent = sliderMax > 1 ? ((state.mineCount - 1) / (sliderMax - 1)) * 100 : 0;
+          // Clamp so neither the gem (green) nor bomb (red) segment ever fully disappears —
+          // a tiny sliver of each stays visible even at the extreme ends of the slider.
+          const sliderPercent = Math.min(96, Math.max(4, rawSliderPercent));
+
+          content.innerHTML = `
+            <div class="game-page">
+              <div class="game-shell ${state.settings.animations ? "" : "no-animations"}">
+                <div class="shell-grid">
+
+                  <header class="title-bar">
+                    <button class="game-icon-btn hover-tip" data-hover-tip="Game info" data-info>${svg("safe")}</button>
+                    <div class="title-name">${GAME_NAME}</div>
+                    <button class="fair-play-btn" data-fair-play>${svg("safe")} Fair Play</button>
+                  </header>
+
+                  <aside class="sidebar">
+                    <div class="field-label">Bet Amount</div>
+                    <div class="bet-input-row">
+                      <span class="prefix">$</span>
+                      <input type="text" inputmode="decimal" placeholder="0.00" value="${state.betAmount}" data-bet-input class="${insufficientBalance || belowMinBet ? "error" : ""}" ${state.active ? "disabled" : ""}>
+                      <div class="bet-quick">
+                        <button data-half ${state.active ? "disabled" : ""}>½</button>
+                        <button data-double-bet ${state.active ? "disabled" : ""}>2×</button>
+                      </div>
+                    </div>
+                    ${insufficientBalance ? `<div class="balance-error">Insufficient balance</div>` : ""}
+                    ${!insufficientBalance && belowMinBet ? `<div class="balance-error">Minimum bet is ${Shell.fmtMoney(Shell.MIN_BET)}</div>` : ""}
+
+                    <div class="field-label">Grid Size</div>
+                    <div class="mines-size-row">
+                      ${GRID_SIZES.map((n) => `<button class="mines-size-btn ${state.gridSize === n ? "active" : ""}" data-size-pick="${n}" ${state.active ? "disabled" : ""}>${n}</button>`).join("")}
+                    </div>
+
+                    <div class="field-label">Number of Mines</div>
+                    <div class="mines-slider-row">
+                      <div class="mines-pill gems"><span class="picon">💎</span><strong data-mines-gem-count>${totalGems}</strong></div>
+                      <div class="mines-track-wrap">
+                        <div class="mines-track-bg">
+                          <div class="mines-track-gems" data-mines-track-gems style="width:${sliderPercent}%;"></div>
+                          <div class="mines-track-bombs" data-mines-track-bombs style="width:${100 - sliderPercent}%;"></div>
+                        </div>
+                        <input type="range" class="mines-range" min="1" max="${state.gridSize - 1}" step="1" value="${state.mineCount}" data-mines-slider ${state.active ? "disabled" : ""}>
+                      </div>
+                      <div class="mines-pill bombs"><span class="picon">💣</span><strong data-mines-mine-count>${state.mineCount}</strong></div>
+                    </div>
+
+                    ${!state.active ? `
+                    <button class="place-bet-btn ${hasBet ? "" : "demo"}" data-place ${insufficientBalance || belowMinBet ? "disabled" : ""} style="margin-top:16px;">
+                      ${hasBet ? "Place Bet" : "Place Demo Bet"}
+                    </button>
+                    ${demoMode ? `<div class="demo-hint-wrap"><div class="demo-hint">Enter Bet Amount For Real Play</div></div>` : ""}` : `
+                    <div class="profit-box">
+                      <div class="profit-box-top">
+                        <div class="profit-box-col left"><span>Current Profit</span><strong>${Shell.fmtMoney(currentProfit)}</strong></div>
+                        <div class="profit-box-chevron">›</div>
+                        <div class="profit-box-col right"><span>Next</span><strong>${Shell.fmtMoney(Math.max(0, nextProfit))}</strong></div>
+                      </div>
+                      <div class="profit-box-bottom"><span class="cur">${state.picks >= 1 ? currentMult.toFixed(2) : "0"}x</span><span class="divider">|</span><span class="nxt">${nextMult.toFixed(2)}x</span></div>
+                    </div>
+                    <button class="mines-cashout-btn" data-cashout ${canCashOut ? "" : "disabled"} style="margin-top:12px;">
+                      Cash Out ${state.picks >= 1 ? `— ${Shell.fmtMoney(state.betAmt * currentMult)}` : ""}
+                    </button>
+                    <button class="mines-random-btn" data-pick-random ${state.active ? "" : "disabled"} style="margin-top:8px;">
+                      Pick Random
+                    </button>`}
+
+                    <div class="sidebar-meta">
+                      <div class="sidebar-meta-row"><span>Balance</span><strong>${Shell.fmtMoney(balance)}</strong></div>
+                      ${state.active ? `<div class="sidebar-meta-row"><span>Gems found</span><strong>${state.picks} / ${totalGems}</strong></div>` : ""}
+                    </div>
+                  </aside>
+
+                  <section class="game-box mines-stage">
+                    <div class="mines-board-wrap">${gridHTML()}</div>
+                    ${r && state.showResultOverlay && won ? resultOverlayHTML(r) : ""}
+                  </section>
+
+                  <footer class="bottom-bar">
+                    <div class="bottom-icons">
+                      <div style="position:relative;">
+                        <button class="bottom-icon-btn ${state.settingsOpen ? "active" : ""}" data-settings-toggle title="Settings">${svg("settings")}</button>
+                        ${state.settingsOpen ? `
+                        <div class="popover" data-settings-popover>
+                          <div class="popover-title">Game Settings</div>
+                          <div class="popover-row"><span>Animations</span><button class="switch ${state.settings.animations ? "on" : ""}" data-toggle-setting="animations" ${Shell.isAnimationsDisabled() ? "disabled" : ""}></button></div>
+                          <div class="volume-row"><span>Volume — ${state.settings.volume}%</span><input type="range" min="0" max="100" value="${state.settings.volume}" data-volume-slider></div>
+                        </div>` : ""}
+                      </div>
+                      <button class="bottom-icon-btn ${state.favorite ? "fav-on" : ""}" data-fav-toggle title="Favorite">${svg("heart")}</button>
+                      <button class="bottom-icon-btn ${state.statsOpen ? "active" : ""}" data-stats-toggle title="Live stats">${svg("activity")}</button>
+                    </div>
+                    <div class="bottom-logo">Neon Jackpot</div>
+                  </footer>
+                </div>
+
+                ${Shell.statsPanelHTML(state, GAME_ID, GAME_NAME)}
+              </div>
+            </div>
+
+            ${state.infoOpen ? `
+            <div class="modal-overlay" data-info-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>${GAME_NAME}</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Pick a grid size and how many mines to hide, then click tiles one at a time.
+                Every gem you reveal raises your multiplier — cash out any time, or keep going
+                for a bigger payout. Hit a mine and the round ends with nothing. If you reveal
+                every remaining gem, the round automatically pays out since there are no more
+                winning tiles left to click.</p>
+              </div>
+            </div>` : ""}
+
+            ${state.fairPlayOpen ? `
+            <div class="modal-overlay" data-fair-play-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>${svg("safe")} Fair Play</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Mine positions are placed with an independent, uniformly random shuffle the
+                moment you place your bet. Multipliers are computed directly from the odds of
+                clearing that many gems in a row — (gems remaining / tiles remaining), multiplied
+                across every successful pick — divided into a 96% return-to-player target, then
+                floored to 2 decimals so displayed and paid multipliers always match exactly.</p>
+              </div>
+            </div>` : ""}
+          `;
+
+          bind();
+        }
+
+        function refocus(sel) {
+          const el = document.querySelector(sel);
+          if (el) { el.focus(); const v = el.value; el.value = ""; el.value = v; }
+        }
+
+        function clampMineCount(gridSize, mineCount) {
+          return Math.min(Math.max(1, mineCount), gridSize - 1);
+        }
+
+        // ---------------------------------------------------------------
+        // LIVE PATCH — while dragging the mines slider, patch just the
+        // track fill + pill counts directly instead of calling render()
+        // (a full innerHTML rebuild). Rebuilding mid-drag replaces the
+        // <input> element the browser is actively tracking, which is why
+        // a full render() on every "input" event only let the slider move
+        // one tick per press. This mirrors dice.html's updateOddsDisplay.
+        // ---------------------------------------------------------------
+        function updateMinesSliderDisplay() {
+          const sliderMax = state.gridSize - 1;
+          const rawPercent = sliderMax > 1 ? ((state.mineCount - 1) / (sliderMax - 1)) * 100 : 0;
+          const percent = Math.min(96, Math.max(4, rawPercent));
+          const trackGems = document.querySelector("[data-mines-track-gems]");
+          const trackBombs = document.querySelector("[data-mines-track-bombs]");
+          if (trackGems) trackGems.style.width = percent + "%";
+          if (trackBombs) trackBombs.style.width = (100 - percent) + "%";
+          const gemCountEl = document.querySelector("[data-mines-gem-count]");
+          if (gemCountEl) gemCountEl.textContent = state.gridSize - state.mineCount;
+          const mineCountEl = document.querySelector("[data-mines-mine-count]");
+          if (mineCountEl) mineCountEl.textContent = state.mineCount;
+        }
+
+        function bind() {
+          if (state.showResultOverlay) {
+            document.querySelector(".sidebar")?.addEventListener("click", dismissResultOverlay);
+            document.querySelector("[data-result-overlay]")?.addEventListener("click", dismissResultOverlay);
+          }
+
+          document.querySelector("[data-place]")?.addEventListener("click", startRound);
+          document.querySelector("[data-cashout]")?.addEventListener("click", () => cashOut(false));
+          document.querySelector("[data-pick-random]")?.addEventListener("click", pickRandomTile);
+
+          const betInput = document.querySelector("[data-bet-input]");
+          betInput?.addEventListener("input", (e) => {
+            state.betAmount = e.target.value.replace(/[^0-9.]/g, "");
+            render();
+            refocus("[data-bet-input]");
+          });
+          document.querySelector("[data-half]")?.addEventListener("click", () => {
+            const b = parseFloat(state.betAmount) || 0;
+            state.betAmount = (b / 2).toFixed(2);
+            render();
+          });
+          document.querySelector("[data-double-bet]")?.addEventListener("click", () => {
+            const b = parseFloat(state.betAmount) || 0;
+            state.betAmount = Math.min(b * 2 || 0, Shell.getBalance()).toFixed(2);
+            render();
+          });
+
+          document.querySelectorAll("[data-size-pick]").forEach((btn) => btn.addEventListener("click", () => {
+            if (state.active) return;
+            const newSize = parseInt(btn.dataset.sizePick, 10);
+            if (newSize === state.gridSize) return;
+            // preserve the player's chosen mine density when the grid size changes
+            const ratio = state.mineCount / state.gridSize;
+            state.gridSize = newSize;
+            state.mineCount = clampMineCount(newSize, Math.round(newSize * ratio));
+            state.tiles = null;
+            state.revealed = null;
+            state.demoTiles = null;
+            state.picks = 0;
+            state.lastResult = null;
+            state.showResultOverlay = false;
+            render();
+          }));
+
+          document.querySelector("[data-mines-slider]")?.addEventListener("input", (e) => {
+            state.mineCount = clampMineCount(state.gridSize, parseInt(e.target.value, 10) || 1);
+            updateMinesSliderDisplay();
+          });
+
+          document.querySelectorAll("[data-mines-tile]").forEach((el) => {
+            el.addEventListener("click", () => pickTile(parseInt(el.dataset.minesTile, 10)));
+          });
+
+          document.querySelector("[data-info]")?.addEventListener("click", () => { state.infoOpen = true; render(); });
+          document.querySelector("[data-fair-play]")?.addEventListener("click", () => { state.fairPlayOpen = true; render(); });
+          document.querySelectorAll("[data-modal-close]").forEach((btn) => btn.onclick = () => { state.infoOpen = false; state.fairPlayOpen = false; render(); });
+          document.querySelector("[data-info-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.infoOpen = false; render(); } });
+          document.querySelector("[data-fair-play-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.fairPlayOpen = false; render(); } });
+
+          document.querySelector("[data-settings-toggle]")?.addEventListener("click", () => { state.settingsOpen = !state.settingsOpen; render(); });
+          document.querySelector("[data-toggle-setting]")?.addEventListener("click", (e) => {
+            const key = e.currentTarget.dataset.toggleSetting;
+            state.settings[key] = !state.settings[key];
+            render();
+          });
+          document.querySelector("[data-volume-slider]")?.addEventListener("input", (e) => { state.settings.volume = parseInt(e.target.value, 10); });
+
+          document.querySelector("[data-fav-toggle]")?.addEventListener("click", () => {
+            Shell.toggleFavorite(GAME_ID);
+            state.favorite = Shell.getFavorites().includes(GAME_ID);
+            render();
+          });
+
+          document.querySelector("[data-stats-toggle]")?.addEventListener("click", () => { state.statsOpen = !state.statsOpen; render(); });
+          Shell.bindStatsPanel(state, render);
+
+          document.addEventListener("click", (e) => {
+            if (state.settingsOpen && !e.target.closest("[data-settings-popover]") && !e.target.closest("[data-settings-toggle]")) {
+              state.settingsOpen = false; render();
+            }
+          }, { once: true });
+        }
+
+        Shell.attachStatsPanelDrag(state, render);
+
+        (function restoreRound() {
+          const saved = Shell.loadActiveRound(GAME_ID);
+          if (!saved) return;
+          state.gridSize = saved.gridSize;
+          state.mineCount = saved.mineCount;
+          state.betAmt = saved.betAmt;
+          state.tiles = saved.tiles;
+          state.revealed = saved.revealed;
+          state.picks = saved.picks;
+          state.active = true;
+          state.lastResult = null;
+          state.showResultOverlay = false;
+        })();
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

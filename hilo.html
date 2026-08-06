@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Neon Jackpot fictional arcade demo — Hilo" />
+    <title>Hilo · Neon Jackpot</title>
+    <link rel="stylesheet" href="./shell.css" />
+    <link rel="stylesheet" href="./game-frame.css" />
+    <style>
+      .game-box.hilo-stage {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        padding: 16px;
+        background: linear-gradient(160deg, #182d42, #16203d 56%, #321849);
+        position: relative;
+        overflow: hidden;
+      }
+      .hilo-table {
+        position: relative;
+        width: 100%;
+        max-width: 620px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 26px;
+      }
+
+      /* start-card badge, top-left of the stage */
+      .hilo-start-badge {
+        position: absolute;
+        top: -10px;
+        left: -6px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        z-index: 3;
+      }
+      .hilo-start-pill {
+        padding: 4px 12px;
+        color: #04140f;
+        background: var(--mint);
+        border-radius: 999px;
+        font-size: 10.5px;
+        font-weight: 800;
+      }
+      .hilo-start-card {
+        width: 58px;
+        height: 82px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1px;
+        background: #f4f6fb;
+        border-radius: 8px;
+        box-shadow: 0 8px 18px rgba(0,0,0,.35);
+      }
+      .hilo-start-card .rank { font-size: 19px; font-weight: 800; line-height: 1; color: #171a26; }
+      .hilo-start-card .rank.red { color: #e8384f; }
+      .hilo-start-card .suit { font-size: 15px; line-height: 1; color: #171a26; }
+      .hilo-start-card .suit.red { color: #e8384f; }
+
+      /* the two side "info" panels — display only, not clickable. The actual guess
+         buttons live in .hilo-info-row at the bottom of the stage. */
+      .hilo-side {
+        position: relative;
+        width: 128px;
+        min-height: 178px;
+        padding: 18px 10px 14px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+        text-align: center;
+        color: #6d7891;
+        background: rgba(255,255,255,.025);
+        border: 1px solid rgba(255,255,255,.08);
+        border-radius: 16px;
+      }
+      .hilo-side.disabled { opacity: .55; }
+      .hilo-side svg { width: 22px; height: 22px; }
+      .hilo-side.higher svg { color: var(--mint); }
+      .hilo-side.lower svg { color: var(--red); }
+      .hilo-side-labels { display: flex; flex-direction: column; align-items: center; gap: 1px; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: #b6bfd2; }
+      .hilo-side-labels span:last-child { color: #6d7891; font-size: 10px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+      /* multiplier pill, centered at the bottom of each side panel — replaces the old
+         edge-pinned percentage readout per the reference screenshot. */
+      .hilo-side-mult {
+        margin-top: auto;
+        width: 100%;
+        padding: 8px 4px;
+        color: var(--text);
+        background: #0c0e18;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        font-family: var(--mono);
+        font-size: 13px;
+        font-weight: 800;
+        text-align: center;
+      }
+
+      /* center card */
+      .hilo-center {
+        position: relative;
+        width: 184px;
+        height: 254px;
+        perspective: 900px;
+        overflow: visible;
+      }
+      .hilo-skip-btn {
+        position: absolute;
+        top: -22px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 4;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 14px;
+        color: var(--text);
+        background: #12152f;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 700;
+      }
+      .hilo-skip-btn:hover:not(:disabled) { border-color: rgba(92,255,231,.4); color: var(--mint); }
+      .hilo-skip-btn:disabled { opacity: .45; cursor: not-allowed; }
+      .hilo-skip-btn svg { width: 13px; height: 13px; }
+
+      /* card wrap — NOT clipped, so the outgoing card can travel up and visibly exit
+         the top of the game box (per reference video) before the new card drops in
+         from above to rest in the center. */
+      .hilo-card-wrap { position: relative; width: 100%; height: 100%; overflow: visible; border-radius: 14px; }
+      .hilo-card {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: 14px;
+        background: #f4f6fb;
+        box-shadow: 0 16px 40px rgba(0,0,0,.4);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+      }
+      .hilo-card .rank { font-size: 62px; font-weight: 800; line-height: 1; color: #171a26; }
+      .hilo-card .rank.red { color: #e8384f; }
+      .hilo-card .suit { font-size: 44px; line-height: 1; color: #171a26; }
+      .hilo-card .suit.red { color: #e8384f; }
+
+      /* old card: pops straight up out of the game box entirely, then continues up
+         and over toward the top-left start-card slot (it's becoming the new "Start"
+         card), shrinking slightly as it travels. */
+      .hilo-card.pop-out {
+        z-index: 5;
+        animation: hilo-pop-out .5s cubic-bezier(.3,0,.55,1) forwards;
+      }
+      @keyframes hilo-pop-out {
+        0%   { transform: translate(0,0) scale(1); opacity: 1; }
+        35%  { transform: translate(-10%,-165%) scale(.94); opacity: 1; }
+        100% { transform: translate(var(--hilo-start-dx,-260%), var(--hilo-start-dy,-140%)) scale(.35); opacity: 0; }
+      }
+      /* new card: starts above the game box (off the top) and drops down to rest in
+         the center, like the next card being dealt from the top of the deck. */
+      .hilo-card.drop-in { animation: hilo-drop-in .34s cubic-bezier(.2,.85,.35,1) .38s backwards; }
+      @keyframes hilo-drop-in {
+        from { transform: translateY(-260%); opacity: 0; }
+        60%  { opacity: 1; }
+        to   { transform: translateY(0); opacity: 1; }
+      }
+      .no-animations .hilo-card.pop-out,
+      .no-animations .hilo-card.drop-in { animation: none !important; }
+
+      /* the new start-card badge fades/pops in right as the traveling card arrives,
+         so the transition reads as one continuous piece rather than a hard swap. */
+      .hilo-start-badge.badge-in { animation: hilo-badge-in .22s ease-out .38s backwards; }
+      @keyframes hilo-badge-in { from { opacity: 0; transform: translateY(-6px) scale(.9); } to { opacity: 1; transform: translateY(0) scale(1); } }
+      .no-animations .hilo-start-badge.badge-in { animation: none !important; }
+
+      /* the real, clickable guess buttons — bottom row under the table */
+      .hilo-info-row {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        gap: 12px;
+        margin-top: 34px;
+        width: 100%;
+        max-width: 620px;
+      }
+      .hilo-info-chip {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 13px 18px;
+        color: #cdd4e2;
+        background: rgba(255,255,255,.03);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        font-size: 12.5px;
+        font-weight: 700;
+        text-transform: none;
+        letter-spacing: .01em;
+        cursor: pointer;
+        transition: border-color .15s ease, background .15s ease, transform .1s ease;
+      }
+      .hilo-info-chip:hover:not(:disabled) { border-color: rgba(92,255,231,.35); background: rgba(255,255,255,.05); }
+      .hilo-info-chip:active:not(:disabled) { transform: scale(.985); }
+      .hilo-info-chip:disabled { cursor: not-allowed; opacity: .5; }
+      .hilo-info-chip svg { width: 15px; height: 15px; flex-shrink: 0; }
+      .hilo-info-chip.lower svg { color: var(--red); }
+      .hilo-info-chip.higher svg { color: var(--mint); }
+      .hilo-info-chip .chip-pct-group { display: flex; align-items: center; gap: 6px; }
+      .hilo-info-chip .chip-pct { color: #8791a6; font-family: var(--mono); font-size: 12px; font-weight: 700; }
+
+      /* sidebar cash-out button, shown once there's at least one correct guess */
+      .hilo-cashout-btn {
+        width: 100%; margin-top: 10px; padding: 14px 0; color: #04140f;
+        background: linear-gradient(120deg, #38d787, #63f0ab); border: 0; border-radius: 12px;
+        font-size: 13px; font-weight: 800;
+      }
+      .hilo-cashout-btn:disabled { color: #6c7488; background: #1b2032; }
+
+      /* round-result overlay — appears over the game stage on cashout/bust, showing
+         the multiplier hit and total return, matching the compact glowing-card
+         pattern used elsewhere on the site (matches Mines' result overlay exactly). */
+      .hilo-round-result {
+        position: absolute; inset: 0; z-index: 20;
+        display: grid; place-items: center;
+        background: rgba(8, 9, 16, .62);
+        backdrop-filter: blur(1.5px);
+        border-radius: inherit;
+        animation: hilo-overlay-in .18s ease;
+        cursor: pointer;
+      }
+      @keyframes hilo-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+      .hilo-round-result-panel {
+        display: flex; flex-direction: column; align-items: center; gap: 6px;
+        padding: 22px 34px; background: #171c2c; border: 1px solid var(--line); border-radius: 16px;
+        box-shadow: 0 20px 50px rgba(0,0,0,.45);
+        cursor: default;
+      }
+      .hilo-round-result.win .hilo-round-result-panel { border-color: rgba(92,255,231,.5); }
+      .hilo-round-result.lose .hilo-round-result-panel { border-color: rgba(255,110,143,.5); }
+      .hilo-round-result-mult { font-family: var(--mono); font-size: 26px; font-weight: 800; color: var(--mint); }
+      .hilo-round-result.lose .hilo-round-result-mult { color: var(--red); }
+      .hilo-round-result-profit { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--mint); }
+      .hilo-round-result.lose .hilo-round-result-profit { color: var(--red); }
+      .hilo-streak-box {
+        margin-top: 14px;
+        padding: 10px 12px;
+        background: rgba(255,255,255,.03);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        color: #8791a6;
+      }
+      .hilo-streak-box strong { color: var(--mint); font-family: var(--mono); font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div class="site-shell">
+      <div class="site-grid">
+        <div id="site-sidebar"></div>
+        <div id="site-topbar"></div>
+        <div id="page-content"></div>
+      </div>
+    </div>
+    <script src="./promo-vault.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="./chat.js"></script>
+    <script src="./shell.js"></script>
+    <script src="./games.js"></script>
+    <script>
+      (() => {
+        const GAME_NAME = "Hilo";
+        const GAME_ID = "hilo";
+
+        Shell.mount({ activeTab: "Games" });
+        Chat.mount();
+        document.addEventListener("nj:animations", (e) => { state.settings.animations = !e.detail; render(); });
+        const content = document.getElementById("page-content");
+        const svg = Shell.svg;
+
+        // ---------------------------------------------------------------
+        // CARD MODEL — infinite/reshuffled deck: every draw is an
+        // independent uniform pick across all 13 ranks × 4 suits (52
+        // cards), regardless of what's been drawn before. Odds below are
+        // therefore computed purely from the CURRENT card's rank, not
+        // from any depleting shoe.
+        // ---------------------------------------------------------------
+        const RANK_NAMES = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"]; // index 0..12, Ace LOW
+        const SUITS = [{ s: "♠", red: false }, { s: "♣", red: false }, { s: "♥", red: true }, { s: "♦", red: true }];
+        const HOUSE_RTP = 0.96;
+        const MIN_MULT = 1.01; // a side can never compute below this, even at the extreme (A / K)
+
+        function drawCard() {
+          const rankIdx = Math.floor(Math.random() * RANK_NAMES.length);
+          const suit = SUITS[Math.floor(Math.random() * SUITS.length)];
+          return { rankIdx, rank: RANK_NAMES[rankIdx], suit: suit.s, red: suit.red };
+        }
+
+        // Out of 13 ranks, how many count as "higher" / "lower" / equal to rankIdx.
+        function rankCounts(rankIdx) {
+          const higher = 12 - rankIdx;
+          const lower = rankIdx;
+          const same = 1;
+          return { higher, lower, same };
+        }
+
+        // side: "higher" | "lower" — "Same" always pays out on whichever side was picked, per
+        // the game's own labeling ("Higher/Same" and "Lower/Same" are each a single button).
+        function sideChance(rankIdx, side) {
+          const c = rankCounts(rankIdx);
+          const favorable = side === "higher" ? (c.higher + c.same) : (c.lower + c.same);
+          return favorable / 13;
+        }
+
+        function sideMultiplier(rankIdx, side) {
+          const chance = sideChance(rankIdx, side);
+          if (chance <= 0) return MIN_MULT;
+          const raw = HOUSE_RTP / chance;
+          let mult = Math.floor(raw * 100) / 100;
+          if (mult < MIN_MULT) mult = MIN_MULT;
+          return mult;
+        }
+
+        // ---------------------------------------------------------------
+        // SOUND — two effects only: a quick "swipe" whoosh whenever a card
+        // cycles (guess or skip), and a soft, subtle down-tone on a loss.
+        // Wins reuse the shared Shell.playWinDing; no other sounds.
+        // ---------------------------------------------------------------
+        let audioCtx = null;
+        const getCtx = () => { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); return audioCtx; };
+        function playCardSwipe(volumePct) {
+          const v = volumePct / 100;
+          if (v <= 0) return;
+          try {
+            const ctx = getCtx();
+            const now = ctx.currentTime;
+            const dur = 0.22;
+            // short filtered noise burst with a rising-then-falling bandpass sweep — reads
+            // as a quick card swish rather than a thump or a click.
+            const bufferSize = Math.floor(ctx.sampleRate * dur);
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 0.9);
+            const noise = ctx.createBufferSource();
+            noise.buffer = buffer;
+            const bandpass = ctx.createBiquadFilter();
+            bandpass.type = "bandpass";
+            bandpass.Q.value = 0.7;
+            bandpass.frequency.setValueAtTime(1400, now);
+            bandpass.frequency.exponentialRampToValueAtTime(3200, now + dur * 0.5);
+            bandpass.frequency.exponentialRampToValueAtTime(900, now + dur);
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.001, now);
+            g.gain.exponentialRampToValueAtTime(0.22 * v, now + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+            noise.connect(bandpass).connect(g).connect(ctx.destination);
+            noise.start(now);
+            noise.stop(now + dur);
+          } catch {}
+        }
+        function playLoseSound(volumePct) {
+          const v = volumePct / 100;
+          if (v <= 0) return;
+          try {
+            const ctx = getCtx();
+            const now = ctx.currentTime;
+            // a soft, brief two-note downward sine — deliberately quiet/short so it never
+            // reads as harsh or punishing, just a gentle "that one didn't land" cue.
+            [420, 300].forEach((freq, i) => {
+              const t = now + i * 0.09;
+              const osc = ctx.createOscillator();
+              const g = ctx.createGain();
+              osc.type = "sine";
+              osc.frequency.setValueAtTime(freq, t);
+              g.gain.setValueAtTime(0.001, t);
+              g.gain.exponentialRampToValueAtTime(0.09 * v, t + 0.02);
+              g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+              osc.connect(g).connect(ctx.destination);
+              osc.start(t); osc.stop(t + 0.22);
+            });
+          } catch {}
+        }
+
+        // ---------------------------------------------------------------
+        // STATE
+        // ---------------------------------------------------------------
+        const state = {
+          betAmount: "1.00",
+          busy: false,
+          infoOpen: false,
+          fairPlayOpen: false,
+          settingsOpen: false,
+          statsOpen: false,
+          statsGame: "all",
+          statsGameDropdownOpen: false,
+          statsDrag: null,
+          statsPos: null,
+          favorite: Shell.getFavorites().includes(GAME_ID),
+          settings: { animations: !Shell.isAnimationsDisabled(), volume: 100 },
+
+          active: false,
+          betAmt: 0,
+          startCard: null,      // the "Start" badge card shown when a round begins
+          current: null,        // the currently displayed live card
+          streak: 0,            // correct guesses so far this round
+          history: [],          // every card drawn this round, in order, for the bet-detail view
+          lastGuessResult: null, // "win" | "lose" | null — last guess outcome, kept for bet-history/debugging
+          lastResult: null,     // { won, profit, payoutLabel, payout } once the round settles
+          showResultOverlay: false,
+          cardAnim: null,       // { from: card, to: card } while the swipe-up/reveal/swipe-down animation is playing, else null
+        };
+
+        function currentMult(side) {
+          if (!state.active || !state.current) return 1;
+          return sideMultiplier(state.current.rankIdx, side);
+        }
+
+        function currentChancePct(side) {
+          if (!state.active || !state.current) return 0;
+          return sideChance(state.current.rankIdx, side) * 100;
+        }
+
+        function payoutForStreak() {
+          // Streak multiplier is the PRODUCT of each individual guess's multiplier at the time
+          // it was made — recompute from history rather than compounding floats live, so the
+          // number shown always matches exactly what recordBet() will pay out.
+          let mult = 1;
+          for (const h of state.history) mult *= h.mult;
+          return Math.round(mult * 10000) / 10000;
+        }
+
+        function buildBetDetail() {
+          // Reuse the shared "cards" detail type: one hand, cards in the order drawn, most
+          // recent last. The start card is included so the whole sequence reads naturally.
+          const cards = [state.startCard, ...state.history.map((h) => h.card)].map((c) => ({
+            label: `${c.rank}${c.suit}`,
+            red: c.red,
+          }));
+          return { type: "cards", hands: [{ label: "Sequence", cards }] };
+        }
+
+        function recordBet(betAmount, result) {
+          Shell.addBetEntry({ game: GAME_ID, bet: betAmount, won: result.won, profit: result.profit, detail: buildBetDetail() });
+          if (result.won) Shell.addBalance(betAmount + result.profit);
+        }
+
+        function persistRound() {
+          if (!state.active) { Shell.clearActiveRound(GAME_ID); return; }
+          Shell.saveActiveRound(GAME_ID, {
+            betAmt: state.betAmt, startCard: state.startCard, current: state.current,
+            streak: state.streak, history: state.history,
+          });
+        }
+
+        function startRound() {
+          if (state.busy || state.active) return;
+          const raw = parseFloat(state.betAmount);
+          let amt = state.betAmount !== "" && !isNaN(raw) && raw > 0 ? Math.round(raw * 100) / 100 : 0;
+          const balance = Shell.getBalance();
+          if (amt > 0 && (balance <= 0 || amt > balance)) { Shell.notify("Insufficient balance."); return; }
+          if (amt > 0 && Shell.isBelowMinBet(amt)) { Shell.notify("Minimum bet is $0.10."); return; }
+          amt = Math.min(amt, balance);
+
+          if (amt > 0) Shell.addBalance(-amt);
+          const card = drawCard();
+          state.active = true;
+          state.betAmt = amt;
+          state.startCard = card;
+          state.current = card;
+          state.streak = 0;
+          state.history = [];
+          state.lastGuessResult = null;
+          state.lastResult = null;
+          state.showResultOverlay = false;
+          state.cardAnim = null;
+          persistRound();
+          render();
+        }
+
+        // Timing must match the CSS: the old card pops up out of the box and travels
+        // toward the start-card slot (.5s), while the new card drops in from above,
+        // starting partway through that travel (.38s delay, .34s duration) so the two
+        // motions overlap the way they do in the reference video. Total round-trip
+        // ends when the pop-out animation finishes.
+        const POP_OUT_MS = 500;
+        const DROP_IN_DELAY_MS = 380;
+        const DROP_IN_MS = 340;
+        const TOTAL_ANIM_MS = Math.max(POP_OUT_MS, DROP_IN_DELAY_MS + DROP_IN_MS);
+
+        // Redraw the start card without betting — only available before the first guess.
+        // Uses the same swipe animation as a guess so skipping feels consistent.
+        function skipCard() {
+          if (state.busy || !state.active || state.streak > 0) return;
+          state.busy = true;
+          const next = drawCard();
+          const from = state.current;
+          const animate = state.settings.animations;
+
+          playCardSwipe(state.settings.volume);
+          if (!animate) {
+            state.startCard = next;
+            state.current = next;
+            state.busy = false;
+            persistRound();
+            render();
+            return;
+          }
+
+          state.cardAnim = { from, to: next, from0: state.startCard };
+          render();
+          setTimeout(() => {
+            state.cardAnim = null;
+            state.startCard = next;
+            state.current = next;
+            state.busy = false;
+            persistRound();
+            render();
+          }, TOTAL_ANIM_MS);
+        }
+
+        function guess(side) {
+          if (state.busy || !state.active) return;
+          state.busy = true;
+          const mult = sideMultiplier(state.current.rankIdx, side);
+          const chance = sideChance(state.current.rankIdx, side);
+          const next = drawCard();
+          const from = state.current;
+          const won = side === "higher"
+            ? (next.rankIdx >= state.current.rankIdx)
+            : (next.rankIdx <= state.current.rankIdx);
+          const animate = state.settings.animations;
+
+          playCardSwipe(state.settings.volume);
+          state.cardAnim = animate ? { from, to: next, from0: state.startCard } : null;
+          if (animate) render();
+
+          const delay = animate ? TOTAL_ANIM_MS : 0;
+          setTimeout(() => {
+            state.cardAnim = null;
+            state.current = next;
+
+            if (!won) {
+              playLoseSound(state.settings.volume);
+              state.lastGuessResult = "lose";
+              const result = { won: false, profit: -state.betAmt, payout: 0, payoutLabel: "0.00x" };
+              recordBet(state.betAmt, result);
+              state.lastResult = result;
+              state.active = false;
+              state.busy = false;
+              state.showResultOverlay = true;
+              Shell.clearActiveRound(GAME_ID);
+              render();
+              return;
+            }
+
+            Shell.playWinDing(state.settings.volume);
+            state.lastGuessResult = "win";
+            state.streak += 1;
+            state.history.push({ card: next, side, mult, chance });
+            state.busy = false;
+            persistRound();
+            render();
+          }, delay);
+        }
+
+        function cashOut() {
+          if (!state.active || state.streak < 1) return;
+          const mult = payoutForStreak();
+          const payout = Math.round(state.betAmt * mult * 100) / 100;
+          const result = { won: true, profit: payout - state.betAmt, payout, payoutLabel: `${mult.toFixed(2)}x` };
+          recordBet(state.betAmt, result);
+          state.lastResult = result;
+          state.active = false;
+          state.busy = false;
+          state.showResultOverlay = true;
+          Shell.clearActiveRound(GAME_ID);
+          render();
+        }
+
+        function dismissResultOverlay(e) {
+          if (!state.showResultOverlay) return;
+          state.showResultOverlay = false;
+          render();
+        }
+
+        function miniCardHTML(card, cls) {
+          if (!card) return "";
+          return `<div class="${cls}">
+            <div class="rank ${card.red ? "red" : ""}">${card.rank}</div>
+            <div class="suit ${card.red ? "red" : ""}">${card.suit}</div>
+          </div>`;
+        }
+
+        function stageHTML() {
+          const hasRound = state.active && state.current;
+          // While the pop-out/drop-in animation is running, the start-card badge should
+          // still show the PREVIOUS start card until the traveling card actually lands
+          // (badge swap is timed to DROP_IN_DELAY_MS via the badge-in animation-delay),
+          // so it doesn't jump ahead of the card that's still mid-flight toward it.
+          const anim = state.cardAnim; // null | { from: card, to: card }
+          const startCard = anim ? anim.from0 ?? state.startCard : state.startCard;
+          const current = state.current;
+
+          const higherMult = hasRound ? currentMult("higher") : 1;
+          const lowerMult = hasRound ? currentMult("lower") : 1;
+          const higherPct = hasRound ? currentChancePct("higher") : 0;
+          const lowerPct = hasRound ? currentChancePct("lower") : 0;
+
+          const canGuess = hasRound && !state.busy;
+          const canSkip = hasRound && !state.busy && state.streak === 0;
+
+          const r = state.lastResult;
+          const showOverlay = state.showResultOverlay && !state.busy && r;
+          const overlayHTML = showOverlay ? `
+            <div class="hilo-round-result ${r.won ? "win" : "lose"}" data-hilo-result-overlay>
+              <div class="hilo-round-result-panel">
+                <div class="hilo-round-result-mult">${r.payoutLabel}</div>
+                <div class="hilo-round-result-profit">${r.won ? "+" : ""}${Shell.fmtMoney(r.payout)}</div>
+              </div>
+            </div>
+          ` : "";
+
+          // During the pop/drop animation we briefly render TWO stacked cards: the
+          // outgoing card popping up and out of the game box toward the start-card
+          // slot (top-left), and the incoming card dropping down from above the box
+          // to settle in the center — matching the reference video.
+          const cardInnerHTML = (card) => card ? `
+              <div class="rank ${card.red ? "red" : ""}">${card.rank}</div>
+              <div class="suit ${card.red ? "red" : ""}">${card.suit}</div>
+            ` : `<div class="rank" style="opacity:.3;">?</div>`;
+
+          const cardWrapInner = anim
+            ? `<div class="hilo-card pop-out" style="--hilo-start-dx:-215%;--hilo-start-dy:-150%;">${cardInnerHTML(anim.from)}</div>
+               <div class="hilo-card drop-in">${cardInnerHTML(anim.to)}</div>`
+            : `<div class="hilo-card">${cardInnerHTML(current)}</div>`;
+
+          return `
+            <div class="hilo-table">
+              ${startCard ? `<div class="hilo-start-badge${anim ? " badge-in" : ""}">
+                <div class="hilo-start-pill">Start</div>
+                ${miniCardHTML(startCard, "hilo-start-card")}
+              </div>` : ""}
+
+              <div class="hilo-side lower ${hasRound ? "" : "disabled"}">
+                ${svg("chevronDown")}
+                <div class="hilo-side-labels"><span>Lower</span><span>Same</span></div>
+                <div class="hilo-side-mult">${hasRound ? "x" + lowerMult.toFixed(2) : "—"}</div>
+              </div>
+
+              <div class="hilo-center">
+                <button class="hilo-skip-btn" data-hilo-skip ${canSkip ? "" : "disabled"}>${svg("trend")} Skip Card</button>
+                <div class="hilo-card-wrap">
+                  ${cardWrapInner}
+                </div>
+              </div>
+
+              <div class="hilo-side higher ${hasRound ? "" : "disabled"}">
+                <span style="display:inline-flex;transform:rotate(180deg);">${svg("chevronDown")}</span>
+                <div class="hilo-side-labels"><span>Higher</span><span>Same</span></div>
+                <div class="hilo-side-mult">${hasRound ? "x" + higherMult.toFixed(2) : "—"}</div>
+              </div>
+            </div>
+
+            ${overlayHTML}
+
+            <div class="hilo-info-row">
+              <button class="hilo-info-chip lower" data-hilo-guess="lower" ${canGuess ? "" : "disabled"}>
+                <span>Lower / Same</span>
+                <span class="chip-pct-group">${svg("chevronDown")}<span class="chip-pct">${hasRound ? lowerPct.toFixed(2) + "%" : "—"}</span></span>
+              </button>
+              <button class="hilo-info-chip higher" data-hilo-guess="higher" ${canGuess ? "" : "disabled"}>
+                <span class="chip-pct-group"><span style="display:inline-flex;transform:rotate(180deg);">${svg("chevronDown")}</span><span class="chip-pct">${hasRound ? higherPct.toFixed(2) + "%" : "—"}</span></span>
+                <span>Higher / Same</span>
+              </button>
+            </div>
+          `;
+        }
+
+        function render() {
+          const balance = Shell.getBalance();
+          const betRaw = parseFloat(state.betAmount);
+          const hasBet = state.betAmount !== "" && !isNaN(betRaw) && betRaw > 0;
+          const demoMode = !state.active && !hasBet;
+          const insufficientBalance = !state.active && hasBet && betRaw > balance;
+          const belowMinBet = !state.active && hasBet && Shell.isBelowMinBet(betRaw);
+          const canCashOut = state.active && state.streak >= 1 && !state.busy;
+          const r = state.lastResult;
+
+          const streakMult = state.streak >= 1 ? payoutForStreak() : 1;
+          const streakPayout = state.streak >= 1 ? Math.round(state.betAmt * streakMult * 100) / 100 : 0;
+
+          content.innerHTML = `
+            <div class="game-page">
+              <div class="game-shell">
+                <div class="shell-grid">
+
+                  <header class="title-bar">
+                    <button class="game-icon-btn hover-tip" data-hover-tip="Game info" data-info>${svg("safe")}</button>
+                    <div class="title-name">${GAME_NAME}</div>
+                    <button class="fair-play-btn" data-fair-play>${svg("safe")} Fair Play</button>
+                  </header>
+
+                  <aside class="sidebar">
+                    <div class="field-label">Bet Amount</div>
+                    <div class="bet-input-row">
+                      <span class="prefix">$</span>
+                      <input type="text" inputmode="decimal" placeholder="0.00" value="${state.betAmount}" data-bet-input class="${insufficientBalance || belowMinBet ? "error" : ""}" ${state.active || state.busy ? "disabled" : ""}>
+                      <div class="bet-quick">
+                        <button data-half ${state.active || state.busy ? "disabled" : ""}>½</button>
+                        <button data-double-bet ${state.active || state.busy ? "disabled" : ""}>2×</button>
+                      </div>
+                    </div>
+                    ${insufficientBalance ? `<div class="balance-error">Insufficient balance</div>` : ""}
+                    ${!insufficientBalance && belowMinBet ? `<div class="balance-error">Minimum bet is $0.10</div>` : ""}
+
+                    ${state.active ? `
+                      <div class="hilo-streak-box">
+                        <span>Streak</span>
+                        <strong>${state.streak} correct${state.streak >= 1 ? ` · ${streakMult.toFixed(2)}x` : ""}</strong>
+                      </div>
+                      <button class="hilo-cashout-btn" data-hilo-cashout ${canCashOut ? "" : "disabled"}>
+                        ${canCashOut ? `Cash Out ${Shell.fmtMoney(streakPayout)}` : "Make a guess to cash out"}
+                      </button>
+                    ` : `
+                      <button class="place-bet-btn ${state.busy ? "busy" : ""}" data-place ${state.busy || insufficientBalance || belowMinBet || !(betRaw > 0) ? "disabled" : ""}>
+                        ${demoMode ? "Place Demo Bet" : "Place Bet"}
+                      </button>
+                      <div class="demo-hint-wrap"><div class="demo-hint">${demoMode ? "Demo Mode — set a bet amount to wager for real" : ""}</div></div>
+                    `}
+
+                    <div class="sidebar-meta">
+                      <div class="sidebar-meta-row"><span>Balance</span><strong>${Shell.fmtMoney(balance)}</strong></div>
+                    </div>
+                  </aside>
+
+                  <section class="game-box hilo-stage" ${state.showResultOverlay ? `data-dismiss-overlay` : ""}>
+                    ${stageHTML()}
+                  </section>
+
+                  <footer class="bottom-bar">
+                    <div class="bottom-icons">
+                      <div style="position:relative;">
+                        <button class="bottom-icon-btn ${state.settingsOpen ? "active" : ""}" data-settings-toggle title="Settings">${svg("settings")}</button>
+                        ${state.settingsOpen ? `
+                        <div class="popover" data-settings-popover>
+                          <div class="popover-title">Game Settings</div>
+                          <div class="popover-row"><span>Animations</span><button class="switch ${state.settings.animations ? "on" : ""}" data-toggle-setting="animations" ${Shell.isAnimationsDisabled() ? "disabled" : ""}></button></div>
+                          <div class="volume-row"><span>Volume — ${state.settings.volume}%</span><input type="range" min="0" max="100" value="${state.settings.volume}" data-volume-slider></div>
+                        </div>` : ""}
+                      </div>
+                      <button class="bottom-icon-btn ${state.favorite ? "fav-on" : ""}" data-fav-toggle title="Favorite">${svg("heart")}</button>
+                      <button class="bottom-icon-btn ${state.statsOpen ? "active" : ""}" data-stats-toggle title="Live stats">${svg("activity")}</button>
+                    </div>
+                    <div class="bottom-logo">Neon Jackpot</div>
+                  </footer>
+                </div>
+
+                ${Shell.statsPanelHTML(state, GAME_ID, GAME_NAME)}
+              </div>
+            </div>
+
+            ${state.infoOpen ? `
+            <div class="modal-overlay" data-info-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>${GAME_NAME}</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Guess whether the next card will be higher-or-same, or lower-or-same, than the card showing. Each correct guess raises your multiplier and reveals a new card to guess again — cash out any time after your first correct guess, or keep pushing your luck.</p>
+                <p>Aces count as the lowest card and Kings as the highest. A tie ("Same") always counts as a win for whichever side you picked, since both buttons include it. Odds are recalculated from scratch on every card — there's no depleting deck, so the multiplier only ever depends on the rank currently showing.</p>
+              </div>
+            </div>` : ""}
+
+            ${state.fairPlayOpen ? `
+            <div class="modal-overlay" data-fair-play-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>${svg("safe")} Fair Play</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Every card is drawn independently and uniformly from a standard 52-card deck (13 ranks × 4 suits) each time — nothing is depleted or remembered between draws. Multipliers are derived directly from the true probability of each outcome at a ${(HOUSE_RTP * 100).toFixed(0)}% target payback rate, then floored to two decimals.</p>
+              </div>
+            </div>` : ""}
+          `;
+
+          bind();
+        }
+
+        function refocus(sel) {
+          const el = document.querySelector(sel);
+          if (el) { el.focus(); const v = el.value; el.value = ""; el.value = v; }
+        }
+
+        function bind() {
+          document.querySelector("[data-place]")?.addEventListener("click", startRound);
+          document.querySelector("[data-hilo-cashout]")?.addEventListener("click", cashOut);
+          document.querySelector("[data-hilo-skip]")?.addEventListener("click", skipCard);
+          document.querySelectorAll("[data-hilo-guess]").forEach((el) => el.addEventListener("click", () => guess(el.dataset.hiloGuess)));
+
+          const betInput = document.querySelector("[data-bet-input]");
+          betInput?.addEventListener("input", (e) => {
+            state.betAmount = e.target.value.replace(/[^0-9.]/g, "");
+            render();
+            refocus("[data-bet-input]");
+          });
+          document.querySelector("[data-half]")?.addEventListener("click", () => {
+            const b = parseFloat(state.betAmount) || 0;
+            state.betAmount = (b / 2).toFixed(2);
+            render();
+          });
+          document.querySelector("[data-double-bet]")?.addEventListener("click", () => {
+            const b = parseFloat(state.betAmount) || 0;
+            state.betAmount = Math.min(b * 2 || 0, Shell.getBalance()).toFixed(2);
+            render();
+          });
+
+          document.querySelector("[data-info]")?.addEventListener("click", () => { state.infoOpen = true; render(); });
+          document.querySelector("[data-fair-play]")?.addEventListener("click", () => { state.fairPlayOpen = true; render(); });
+          document.querySelectorAll("[data-modal-close]").forEach((btn) => btn.onclick = () => { state.infoOpen = false; state.fairPlayOpen = false; render(); });
+          document.querySelector("[data-info-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.infoOpen = false; render(); } });
+          document.querySelector("[data-fair-play-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.fairPlayOpen = false; render(); } });
+
+          document.querySelector("[data-settings-toggle]")?.addEventListener("click", () => { state.settingsOpen = !state.settingsOpen; render(); });
+          document.querySelector("[data-toggle-setting]")?.addEventListener("click", (e) => {
+            const key = e.currentTarget.dataset.toggleSetting;
+            state.settings[key] = !state.settings[key];
+            render();
+          });
+          document.querySelector("[data-volume-slider]")?.addEventListener("input", (e) => { state.settings.volume = parseInt(e.target.value, 10); });
+
+          document.querySelector("[data-fav-toggle]")?.addEventListener("click", () => {
+            Shell.toggleFavorite(GAME_ID);
+            state.favorite = Shell.getFavorites().includes(GAME_ID);
+            render();
+          });
+
+          document.querySelector("[data-stats-toggle]")?.addEventListener("click", () => { state.statsOpen = !state.statsOpen; render(); });
+          Shell.bindStatsPanel(state, render);
+
+          document.querySelector("[data-dismiss-overlay]")?.addEventListener("click", dismissResultOverlay);
+
+          document.addEventListener("click", (e) => {
+            if (state.settingsOpen && !e.target.closest("[data-settings-popover]") && !e.target.closest("[data-settings-toggle]")) {
+              state.settingsOpen = false; render();
+            }
+          }, { once: true });
+        }
+
+        Shell.attachStatsPanelDrag(state, render);
+
+        // Resume an in-progress round if the player navigated away mid-round.
+        const resumed = Shell.loadActiveRound(GAME_ID);
+        if (resumed) {
+          state.active = true;
+          state.betAmt = resumed.betAmt;
+          state.startCard = resumed.startCard;
+          state.current = resumed.current;
+          state.streak = resumed.streak;
+          state.history = resumed.history || [];
+        }
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

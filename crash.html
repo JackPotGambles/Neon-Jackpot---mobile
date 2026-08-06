@@ -1,0 +1,839 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Neon Jackpot fictional arcade demo — Crash" />
+    <title>Crash · Neon Jackpot</title>
+    <link rel="stylesheet" href="./shell.css" />
+    <link rel="stylesheet" href="./game-frame.css" />
+    <style>
+      /* ---- stage ---- */
+      .game-box.crash-stage {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        padding: 0;
+        background: linear-gradient(160deg, #182d42, #16203d 56%, #321849);
+        position: relative;
+        overflow: hidden;
+      }
+      .crash-history {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 12px 16px;
+        overflow-x: auto;
+        scrollbar-width: none;
+        border-bottom: 1px solid rgba(255,255,255,.06);
+        flex: none;
+      }
+      .crash-history::-webkit-scrollbar { display: none; }
+      .crash-history-chip {
+        flex: none;
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 800;
+      }
+      .crash-history-chip.up { color: #04140f; background: var(--mint); }
+      .crash-history-chip.down { color: #cdd4e2; background: #1b2032; border: 1px solid var(--line); }
+
+      .crash-canvas-wrap {
+        position: relative;
+        flex: 1;
+        min-height: 300px;
+      }
+      .crash-canvas-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+      .crash-readout {
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 4;
+        text-align: center;
+        pointer-events: none;
+      }
+      .crash-mult {
+        font-family: var(--mono);
+        font-size: clamp(38px, 7vw, 64px);
+        font-weight: 800;
+        color: #eef3f8;
+        text-shadow: 0 0 24px rgba(58,160,255,.35);
+        transition: color .15s ease;
+      }
+      .crash-mult.busted { color: var(--red); text-shadow: 0 0 24px rgba(255,110,143,.45); }
+      .crash-mult.cashed { color: var(--mint); text-shadow: 0 0 24px rgba(92,255,231,.45); }
+      .crash-substate {
+        margin-top: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .03em;
+        text-transform: uppercase;
+        color: #8791a6;
+      }
+      .crash-substate.busted { color: var(--red); }
+      .crash-substate.cashed { color: var(--mint); }
+
+      .crash-countdown-ring {
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        z-index: 4; text-align: center; pointer-events: none;
+      }
+      .crash-countdown-num {
+        font-family: var(--mono); font-size: 46px; font-weight: 800; color: #eef3f8;
+      }
+      .crash-countdown-label {
+        margin-top: 4px; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+        text-transform: uppercase; color: #8791a6;
+      }
+
+      .crash-cashed-badge {
+        position: absolute; top: 14px; right: 16px; z-index: 4;
+        padding: 6px 12px; color: #04140f; background: var(--mint);
+        border-radius: 999px; font-family: var(--mono); font-size: 11.5px; font-weight: 800;
+      }
+
+      .no-animations .crash-mult, .no-animations .crash-canvas-wrap canvas { transition: none !important; }
+
+      /* ---- sidebar: auto-cashout field ---- */
+      .crash-field-row { display: flex; align-items: center; gap: 8px; }
+
+      .crash-cashout-btn {
+        width: 100%; padding: 14px 0; color: #04140f;
+        background: linear-gradient(120deg, #38d787, #63f0ab); border: 0; border-radius: 12px;
+        font-size: 13px; font-weight: 800; margin-top: 16px;
+      }
+      .crash-cashout-btn:disabled { color: #6c7488; background: #1b2032; }
+      .crash-cashout-btn.pulse { animation: crash-cashout-pulse 1s ease-in-out infinite; }
+      @keyframes crash-cashout-pulse { 0%, 100% { box-shadow: 0 0 0 rgba(92,255,231,0); } 50% { box-shadow: 0 0 18px rgba(92,255,231,.5); } }
+      .no-animations .crash-cashout-btn.pulse { animation: none !important; }
+
+      .crash-live-payout { margin-top: 8px; text-align: center; font-family: var(--mono); font-size: 12.5px; font-weight: 700; color: var(--mint); min-height: 16px; }
+    </style>
+  </head>
+  <body>
+    <div class="site-shell">
+      <div class="site-grid">
+        <div id="site-sidebar"></div>
+        <div id="site-topbar"></div>
+        <div id="page-content"></div>
+      </div>
+    </div>
+    <script src="./promo-vault.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="./chat.js"></script>
+    <script src="./shell.js"></script>
+    <script src="./games.js"></script>
+    <script>
+      (() => {
+        const GAME_NAME = "Crash";
+        const GAME_ID = "crash";
+
+        Shell.mount({ activeTab: "Games" });
+        Chat.mount();
+        document.addEventListener("nj:animations", (e) => { state.settings.animations = !e.detail; render(); });
+        const content = document.getElementById("page-content");
+        const svg = Shell.svg;
+
+        // ---------------------------------------------------------------
+        // CRASH MATH — provably-fair-style exponential curve.
+        // The crash point is drawn from a house-edge-adjusted distribution:
+        // P(crash point >= m) = HOUSE_RTP / m, for m >= 1. This gives a
+        // ~99% * RTP overall return with a small chance of instant (1.00x)
+        // busts, matching the standard crash-game model. House edge lives
+        // entirely in HOUSE_RTP below (currently 99% RTP / 1% house edge).
+        // ---------------------------------------------------------------
+        const HOUSE_RTP = 0.99;
+        const MIN_CRASH = 1.00;
+        const MAX_AUTO_CASHOUT = 1000;
+
+        function rollCrashPoint() {
+          const r = Math.random();
+          // 1% flat chance of an instant 1.00x bust, matching common crash-game modeling
+          // (keeps the curve from having zero density right at 1.00x).
+          if (r < 0.01) return 1.00;
+          const u = Math.random() || 1e-9;
+          let point = HOUSE_RTP / u;
+          point = Math.floor(point * 100) / 100;
+          return Math.max(MIN_CRASH, point);
+        }
+
+        // Exponential growth curve — matches the visual reference: slow start,
+        // accelerating climb. Multiplier at elapsed seconds t.
+        const GROWTH_RATE = 0.14; // tuned so a ~5s round reaches roughly 2x-3x
+        // Raw, unrounded value — used for the plotted curve so the line is smooth.
+        // Flooring to 2 decimals (as the displayed number does) makes the curve step
+        // in 0.01 increments, which is what caused the jagged/staircase look, most
+        // visible early on when the curve is barely rising between frames.
+        function rawMultAtTime(t) {
+          return Math.max(1, Math.exp(GROWTH_RATE * t));
+        }
+        // Floored to 2 decimals — used only for the displayed/settled multiplier value.
+        function multAtTime(t) {
+          return Math.max(1, Math.floor(rawMultAtTime(t) * 100) / 100);
+        }
+        function timeForMult(m) {
+          return Math.log(m) / GROWTH_RATE;
+        }
+
+        const ROUND_PHASE = { IDLE: "idle", COUNTDOWN: "countdown", RUNNING: "running", ENDED: "ended" };
+        const COUNTDOWN_SECS = 5;
+
+        const state = {
+          betAmount: "1.00",
+          busy: false,
+          infoOpen: false,
+          fairPlayOpen: false,
+          settingsOpen: false,
+          statsOpen: false,
+          statsGame: "all",
+          statsGameDropdownOpen: false,
+          statsDrag: null,
+          statsPos: null,
+          favorite: Shell.getFavorites().includes(GAME_ID),
+          settings: { animations: !Shell.isAnimationsDisabled(), volume: 100 },
+
+          phase: ROUND_PHASE.IDLE,
+          crashPoint: null,
+          roundStart: null,       // performance.now() timestamp the round started running
+          countdownEnd: null,     // performance.now() timestamp countdown ends
+          currentMult: 1,
+          history: JSON.parse(localStorage.getItem("nj_crash_history") || "[]"),
+
+          hasBet: false,          // player currently has money live on THIS round (false once cashed out or busted)
+          betAmt: 0,
+          cashedOut: false,
+          cashedOutAt: null,
+          lastResult: null,       // { won, profit, payoutLabel } shown after settle
+          playedThisRound: false, // true from the moment a bet is placed until the round fully ends — blocks re-betting mid-round even after cashing out
+
+          autoCashoutAt: "",      // empty = disabled; only active once parsed as a number >= 1.01
+          autoCashoutError: "",   // validation message shown under the auto cash-out field
+
+          queuedBet: false,       // player placed a bet during countdown/running, joins next round
+        };
+
+        let rafId = null;
+        let countdownTimerId = null;
+
+        function pushHistory(point) {
+          state.history.unshift(point);
+          state.history = state.history.slice(0, 20);
+          localStorage.setItem("nj_crash_history", JSON.stringify(state.history));
+        }
+
+        function recordBet(betAmount, result) {
+          Shell.addBetEntry({ game: GAME_ID, bet: betAmount, won: result.won, profit: result.profit });
+          if (result.won) Shell.addBalance(betAmount + result.profit);
+        }
+
+        function persistRound() {
+          if (state.phase === ROUND_PHASE.IDLE || state.phase === ROUND_PHASE.ENDED) {
+            Shell.clearActiveRound(GAME_ID);
+            return;
+          }
+          if (!state.hasBet) { Shell.clearActiveRound(GAME_ID); return; }
+          Shell.saveActiveRound(GAME_ID, {
+            phase: state.phase,
+            crashPoint: state.crashPoint,
+            roundStart: state.roundStart != null ? (Date.now() - (performance.now() - state.roundStart)) : null,
+            betAmt: state.betAmt,
+            cashedOut: state.cashedOut,
+            cashedOutAt: state.cashedOutAt,
+            autoCashoutAt: state.autoCashoutAt,
+          });
+        }
+
+        // ---------------------------------------------------------------
+        // ROUND LIFECYCLE
+        // ---------------------------------------------------------------
+        function startCountdown() {
+          state.phase = ROUND_PHASE.COUNTDOWN;
+          state.countdownEnd = performance.now() + COUNTDOWN_SECS * 1000;
+          state.crashPoint = rollCrashPoint();
+          state.currentMult = 1;
+          state.cashedOut = false;
+          state.cashedOutAt = null;
+          state.playedThisRound = false;
+          render();
+          tickCountdown();
+        }
+
+        function tickCountdown() {
+          cancelAnimationFrame(countdownTimerId);
+          if (state.phase !== ROUND_PHASE.COUNTDOWN) return;
+          const remain = state.countdownEnd - performance.now();
+          if (remain <= 0) {
+            beginRun();
+            return;
+          }
+          // Patch just the countdown number instead of a full render() every frame —
+          // full render() was previously only every 200ms via setTimeout, which could
+          // stall/drift if the tab was throttled in the background; rAF self-corrects
+          // by always recomputing from the wall-clock countdownEnd, never from an
+          // assumed tick interval.
+          const el = document.querySelector("[data-crash-countdown-num]");
+          if (el) el.textContent = Math.max(0, Math.ceil(remain / 1000)) + "s";
+          else render();
+          countdownTimerId = requestAnimationFrame(tickCountdown);
+        }
+
+        function beginRun() {
+          clearTimeout(countdownTimerId);
+          state.phase = ROUND_PHASE.RUNNING;
+          state.roundStart = performance.now();
+          state.currentMult = 1;
+          persistRound();
+          render();
+          loop();
+        }
+
+        function loop() {
+          cancelAnimationFrame(rafId);
+          const step = () => {
+            if (state.phase !== ROUND_PHASE.RUNNING) return;
+            const t = (performance.now() - state.roundStart) / 1000;
+            const m = multAtTime(t);
+            state.currentMult = m;
+
+            // auto-cashout — active whenever the field holds a valid number >= 1.01, no separate toggle
+            if (state.hasBet && !state.cashedOut) {
+              const target = parseFloat(state.autoCashoutAt);
+              if (!isNaN(target) && target >= 1.01 && m >= target && target < state.crashPoint) {
+                doCashOut(target, true);
+              }
+            }
+
+            if (m >= state.crashPoint) {
+              crashRound();
+              return;
+            }
+            drawCanvas();
+            updateReadoutDOM();
+            rafId = requestAnimationFrame(step);
+          };
+          rafId = requestAnimationFrame(step);
+        }
+
+        function crashRound() {
+          cancelAnimationFrame(rafId);
+          state.currentMult = state.crashPoint;
+          state.phase = ROUND_PHASE.ENDED;
+          pushHistory(state.crashPoint);
+
+          if (state.hasBet && !state.cashedOut) {
+            const result = { won: false, profit: -state.betAmt, payoutLabel: "0.00x" };
+            recordBet(state.betAmt, result);
+            state.lastResult = result;
+          }
+          state.hasBet = false;
+          Shell.clearActiveRound(GAME_ID);
+          render();
+          playBustSound(state.settings.volume);
+
+          setTimeout(() => {
+            if (state.phase !== ROUND_PHASE.ENDED) return;
+            // Snap the graph back to flat/1.00x immediately, before the countdown for the
+            // next round even starts — previously the crashed curve stayed on screen until
+            // startCountdown() reset it, which looked like the graph was frozen post-crash.
+            state.roundStart = null;
+            state.currentMult = 1;
+            resetToIdleThenMaybeQueue();
+          }, 2200);
+        }
+
+        function resetToIdleThenMaybeQueue() {
+          state.phase = ROUND_PHASE.IDLE;
+          state.lastResult = null;
+          render();
+          startCountdown();
+        }
+
+        function doCashOut(atMult, auto) {
+          if (!state.hasBet || state.cashedOut || state.phase !== ROUND_PHASE.RUNNING) return;
+          const mult = atMult != null ? atMult : state.currentMult;
+          const payout = state.betAmt * mult;
+          state.cashedOut = true;
+          state.cashedOutAt = mult;
+          const result = { won: true, profit: payout - state.betAmt, payoutLabel: `${mult.toFixed(2)}x` };
+          recordBet(state.betAmt, result);
+          state.lastResult = result;
+          state.hasBet = false;
+          Shell.playWinDing(state.settings.volume);
+          persistRound();
+          render();
+        }
+
+        function placeBet() {
+          if (state.busy) return;
+          if (state.playedThisRound) return; // already bet this round — cashing out doesn't reopen betting until the next round
+          if (state.phase !== ROUND_PHASE.IDLE && state.phase !== ROUND_PHASE.COUNTDOWN) return; // can't join a round that's already running/ended
+          const amt = Math.round((parseFloat(state.betAmount) || 0) * 100) / 100;
+          if (!(amt > 0)) return;
+          if (Shell.isBelowMinBet(amt)) { Shell.notify(`Minimum bet is ${Shell.fmtMoney(Shell.MIN_BET)}.`); return; }
+          if (amt > Shell.getBalance()) { Shell.notify("Insufficient balance."); return; }
+
+          Shell.addBalance(-amt);
+          state.hasBet = true;
+          state.playedThisRound = true;
+          state.betAmt = amt;
+          state.cashedOut = false;
+          state.cashedOutAt = null;
+          state.lastResult = null;
+          Shell.playChipSound("place", state.settings.volume);
+          persistRound();
+          render();
+        }
+
+        // ---------------------------------------------------------------
+        // sound
+        // ---------------------------------------------------------------
+        let audioCtx = null;
+        const getCtx = () => { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); return audioCtx; };
+        function playBustSound(volumePct) {
+          const v = volumePct / 100;
+          if (v <= 0) return;
+          try {
+            const ctx = getCtx();
+            const now = ctx.currentTime;
+            const dur = 0.4;
+            const bufferSize = Math.floor(ctx.sampleRate * dur);
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 1.4);
+            const noise = ctx.createBufferSource();
+            noise.buffer = buffer;
+            const lowpass = ctx.createBiquadFilter();
+            lowpass.type = "lowpass";
+            lowpass.frequency.setValueAtTime(700, now);
+            lowpass.frequency.exponentialRampToValueAtTime(100, now + dur);
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0.45 * v, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+            noise.connect(lowpass).connect(g).connect(ctx.destination);
+            noise.start(now);
+            noise.stop(now + dur);
+          } catch {}
+        }
+
+        // ---------------------------------------------------------------
+        // CANVAS — draws the rising curve. Redrawn every animation frame
+        // while running; also drawn once on any full render() for the
+        // idle/countdown/ended snapshots.
+        // ---------------------------------------------------------------
+        function getCanvas() { return document.querySelector("[data-crash-canvas]"); }
+
+        function drawCanvas() {
+          const canvas = getCanvas();
+          if (!canvas) return;
+          const dpr = window.devicePixelRatio || 1;
+          const rect = canvas.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) return;
+          if (canvas.width !== Math.round(rect.width * dpr) || canvas.height !== Math.round(rect.height * dpr)) {
+            canvas.width = Math.round(rect.width * dpr);
+            canvas.height = Math.round(rect.height * dpr);
+          }
+          const ctx = canvas.getContext("2d");
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          const W = rect.width, H = rect.height;
+          ctx.clearRect(0, 0, W, H);
+
+          const busted = state.phase === ROUND_PHASE.ENDED;
+          // Plot from the actual elapsed round time (not the floored display multiplier)
+          // so the curve's x-position tracks real time smoothly frame to frame, rather
+          // than jumping only when the rounded multiplier ticks over.
+          // IMPORTANT: only derive "now" from roundStart while the round is actively
+          // RUNNING. After a bust, roundStart still points at the old round until the
+          // 2.2s pause clears it — computing elapsed time from it on every re-render
+          // (e.g. clicking settings/favorite/stats, which call render() for unrelated
+          // reasons) made the busted curve keep growing past the point it crashed at.
+          let tNow;
+          if (state.phase === ROUND_PHASE.RUNNING && state.roundStart != null) {
+            tNow = Math.max(0, (performance.now() - state.roundStart) / 1000);
+          } else if (state.phase === ROUND_PHASE.ENDED) {
+            tNow = timeForMult(Math.max(state.crashPoint || 1, 1.01));
+          } else {
+            tNow = timeForMult(Math.max(state.currentMult, 1.01));
+          }
+          const tWindow = Math.max(tNow * 1.15, 2.5);
+          const maxMultInWindow = rawMultAtTime(tWindow);
+
+          const marginL = 8, marginB = 10, marginT = 16, marginR = 8;
+          const plotW = W - marginL - marginR;
+          const plotH = H - marginT - marginB;
+
+          function pt(t) {
+            const x = marginL + (t / tWindow) * plotW;
+            const mm = rawMultAtTime(t);
+            const y = H - marginB - ((mm - 1) / (maxMultInWindow - 1 || 1)) * plotH;
+            return [x, y];
+          }
+
+          // More samples early (where the curve is flattest and jaggedness is most
+          // visible) and denser overall — smooths out the smaller radius of curvature
+          // near the round start.
+          const steps = 120;
+          const path = [];
+          for (let i = 0; i <= steps; i++) {
+            const t = (tNow * i) / steps;
+            path.push(pt(t));
+          }
+
+          // Trace the path using quadratic curves through midpoints (a standard smoothing
+          // technique) instead of straight lineTo segments between samples — removes the
+          // faceted/staircase look even with a finite sample count.
+          function tracePath(ctx2) {
+            if (path.length < 2) { ctx2.moveTo(path[0][0], path[0][1]); return; }
+            ctx2.moveTo(path[0][0], path[0][1]);
+            for (let i = 1; i < path.length - 1; i++) {
+              const [cx, cy] = path[i];
+              const [nx, ny] = path[i + 1];
+              const mx = (cx + nx) / 2, my = (cy + ny) / 2;
+              ctx2.quadraticCurveTo(cx, cy, mx, my);
+            }
+            const last = path[path.length - 1];
+            ctx2.lineTo(last[0], last[1]);
+          }
+
+          // filled area under curve
+          const grad = ctx.createLinearGradient(0, marginT, 0, H - marginB);
+          if (busted) {
+            grad.addColorStop(0, "rgba(255,110,143,.28)");
+            grad.addColorStop(1, "rgba(255,110,143,0)");
+          } else {
+            grad.addColorStop(0, "rgba(92,255,231,.28)");
+            grad.addColorStop(1, "rgba(92,255,231,0)");
+          }
+          ctx.beginPath();
+          ctx.moveTo(marginL, H - marginB);
+          tracePath(ctx);
+          ctx.lineTo(path[path.length - 1][0], H - marginB);
+          ctx.closePath();
+          ctx.fillStyle = grad;
+          ctx.fill();
+
+          // line
+          ctx.beginPath();
+          tracePath(ctx);
+          ctx.strokeStyle = busted ? "#ff6e8f" : "#5cffe7";
+          ctx.lineWidth = 3;
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          ctx.stroke();
+
+          // leading dot
+          if (!busted && path.length) {
+            const [lx, ly] = path[path.length - 1];
+            ctx.beginPath();
+            ctx.arc(lx, ly, 5, 0, Math.PI * 2);
+            ctx.fillStyle = "#fff";
+            ctx.shadowColor = "#5cffe7";
+            ctx.shadowBlur = 10;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          }
+        }
+
+        // Live-patch just the readout text every animation frame (cheap) instead of a
+        // full render() (innerHTML rebuild) — mirrors mines.html's slider-drag pattern,
+        // avoids fighting the browser over a 60fps rebuild.
+        function updateReadoutDOM() {
+          const el = document.querySelector("[data-crash-mult]");
+          if (el) el.textContent = state.currentMult.toFixed(2) + "x";
+          const payoutEl = document.querySelector("[data-crash-live-payout]");
+          if (payoutEl && state.hasBet && !state.cashedOut) {
+            payoutEl.textContent = Shell.fmtMoney(state.betAmt * state.currentMult) + " on cash out";
+          }
+        }
+
+        // ---------------------------------------------------------------
+        // RENDER
+        // ---------------------------------------------------------------
+        function historyHTML() {
+          if (!state.history.length) return "";
+          return `<div class="crash-history">${state.history.map((p) => `<div class="crash-history-chip ${p >= 2 ? "up" : "down"}">${p.toFixed(2)}x</div>`).join("")}</div>`;
+        }
+
+        function stageInnerHTML() {
+          const p = state.phase;
+          let overlay = "";
+          if (p === ROUND_PHASE.COUNTDOWN) {
+            const secs = Math.max(0, Math.ceil((state.countdownEnd - performance.now()) / 1000));
+            overlay = `<div class="crash-countdown-ring">
+              <div class="crash-countdown-num" data-crash-countdown-num>${secs}s</div>
+              <div class="crash-countdown-label">Next round starting</div>
+            </div>`;
+          } else if (p === ROUND_PHASE.RUNNING || p === ROUND_PHASE.ENDED) {
+            const busted = p === ROUND_PHASE.ENDED;
+            const cashed = state.cashedOut;
+            overlay = `<div class="crash-readout">
+              <div class="crash-mult ${busted ? "busted" : cashed ? "cashed" : ""}" data-crash-mult>${state.currentMult.toFixed(2)}x</div>
+              <div class="crash-substate ${busted ? "busted" : cashed ? "cashed" : ""}">${busted ? "Busted" : cashed ? `Cashed out at ${state.cashedOutAt.toFixed(2)}x` : "Rising…"}</div>
+            </div>`;
+          } else {
+            overlay = `<div class="crash-readout">
+              <div class="crash-mult">1.00x</div>
+              <div class="crash-substate">Waiting for next round</div>
+            </div>`;
+          }
+          const cashedBadge = state.cashedOut && state.phase !== ROUND_PHASE.IDLE ? `<div class="crash-cashed-badge">${svg("bolt")} Cashed ${state.cashedOutAt.toFixed(2)}x</div>` : "";
+          return `${historyHTML()}
+            <div class="crash-canvas-wrap">
+              <canvas data-crash-canvas></canvas>
+              ${overlay}
+              ${cashedBadge}
+            </div>`;
+        }
+
+        function render() {
+          const balance = Shell.getBalance();
+          const insufficientBalance = !state.hasBet && (parseFloat(state.betAmount) || 0) > balance;
+          const belowMinBet = !state.hasBet && Shell.isBelowMinBet(state.betAmount);
+          const r = state.lastResult;
+
+          const canBet = !state.hasBet && (state.phase === ROUND_PHASE.IDLE || state.phase === ROUND_PHASE.COUNTDOWN);
+          const canCashOut = state.hasBet && !state.cashedOut && state.phase === ROUND_PHASE.RUNNING;
+          const livePayout = canCashOut ? state.betAmt * state.currentMult : null;
+
+          content.innerHTML = `
+            <div class="game-page">
+              <div class="game-shell ${state.settings.animations ? "" : "no-animations"}">
+                <div class="shell-grid">
+
+                  <header class="title-bar">
+                    <button class="game-icon-btn hover-tip" data-hover-tip="Game info" data-info>${svg("safe")}</button>
+                    <div class="title-name">${GAME_NAME}</div>
+                    <button class="fair-play-btn" data-fair-play>${svg("safe")} Fair Play</button>
+                  </header>
+
+                  <aside class="sidebar">
+                    <div class="field-label">Bet Amount</div>
+                    <div class="bet-input-row">
+                      <span class="prefix">$</span>
+                      <input type="text" inputmode="decimal" placeholder="0.00" value="${state.betAmount}" data-bet-input class="${insufficientBalance || belowMinBet ? "error" : ""}" ${state.hasBet ? "disabled" : ""}>
+                      <div class="bet-quick">
+                        <button data-half ${state.hasBet ? "disabled" : ""}>½</button>
+                        <button data-double-bet ${state.hasBet ? "disabled" : ""}>2×</button>
+                      </div>
+                    </div>
+                    ${insufficientBalance ? `<div class="balance-error">Insufficient balance</div>` : ""}
+                    ${!insufficientBalance && belowMinBet ? `<div class="balance-error">Minimum bet is ${Shell.fmtMoney(Shell.MIN_BET)}</div>` : ""}
+
+                    <div class="field-label">Auto Cash Out</div>
+                    <div class="bet-input-row">
+                      <input type="text" inputmode="decimal" placeholder="" value="${state.autoCashoutAt}" data-auto-input class="${state.autoCashoutError ? "error" : ""}" ${state.hasBet ? "disabled" : ""}>
+                      <span class="prefix" style="border-right:0;">x</span>
+                      <div class="bet-quick">
+                        <button data-auto-step="-1" ${state.hasBet ? "disabled" : ""} aria-label="Decrease">${svg("chevronDown")}</button>
+                        <button data-auto-step="1" ${state.hasBet ? "disabled" : ""} aria-label="Increase" style="transform:rotate(180deg);">${svg("chevronDown")}</button>
+                      </div>
+                    </div>
+                    ${state.autoCashoutError ? `<div class="balance-error">${state.autoCashoutError}</div>` : ""}
+
+                    ${!state.hasBet ? `
+                    <button class="place-bet-btn" data-place ${insufficientBalance || belowMinBet || !(parseFloat(state.betAmount) > 0) || !canBet ? "disabled" : ""} style="margin-top:16px;">
+                      ${state.phase === ROUND_PHASE.RUNNING || state.phase === ROUND_PHASE.ENDED ? "Bet Next Round" : "Place Bet"}
+                    </button>` : `
+                    <button class="crash-cashout-btn ${canCashOut ? "pulse" : ""}" data-cashout ${canCashOut ? "" : "disabled"}>
+                      ${state.cashedOut ? `Cashed Out — ${Shell.fmtMoney(state.betAmt * state.cashedOutAt)}` : (state.phase === ROUND_PHASE.RUNNING ? `Cash Out — ${Shell.fmtMoney(state.betAmt * state.currentMult)}` : "Waiting for round…")}
+                    </button>
+                    <div class="crash-live-payout" data-crash-live-payout>${livePayout != null ? Shell.fmtMoney(livePayout) + " on cash out" : ""}</div>`}
+
+                    <div class="sidebar-meta">
+                      <div class="sidebar-meta-row"><span>Balance</span><strong>${Shell.fmtMoney(balance)}</strong></div>
+                    </div>
+                  </aside>
+
+                  <section class="game-box crash-stage">
+                    ${stageInnerHTML()}
+                  </section>
+
+                  <footer class="bottom-bar">
+                    <div class="bottom-icons">
+                      <div style="position:relative;">
+                        <button class="bottom-icon-btn ${state.settingsOpen ? "active" : ""}" data-settings-toggle title="Settings">${svg("settings")}</button>
+                        ${state.settingsOpen ? `
+                        <div class="popover" data-settings-popover>
+                          <div class="popover-title">Game Settings</div>
+                          <div class="popover-row"><span>Animations</span><button class="switch ${state.settings.animations ? "on" : ""}" data-toggle-setting="animations" ${Shell.isAnimationsDisabled() ? "disabled" : ""}></button></div>
+                          <div class="volume-row"><span>Volume — ${state.settings.volume}%</span><input type="range" min="0" max="100" value="${state.settings.volume}" data-volume-slider></div>
+                        </div>` : ""}
+                      </div>
+                      <button class="bottom-icon-btn ${state.favorite ? "fav-on" : ""}" data-fav-toggle title="Favorite">${svg("heart")}</button>
+                      <button class="bottom-icon-btn ${state.statsOpen ? "active" : ""}" data-stats-toggle title="Live stats">${svg("activity")}</button>
+                    </div>
+                    <div class="bottom-logo">Neon Jackpot</div>
+                  </footer>
+                </div>
+
+                ${Shell.statsPanelHTML(state, GAME_ID, GAME_NAME)}
+              </div>
+            </div>
+
+            ${state.infoOpen ? `
+            <div class="modal-overlay" data-info-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>${GAME_NAME}</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Place a bet before the round starts. Once it launches, the multiplier climbs
+                from 1.00x, accelerating the longer it runs. Cash out any time to lock in your
+                current multiplier as your payout — but if the round crashes before you do, your
+                bet is lost. Missed the countdown? Your bet automatically joins the next round.</p>
+              </div>
+            </div>` : ""}
+
+            ${state.fairPlayOpen ? `
+            <div class="modal-overlay" data-fair-play-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>${svg("safe")} Fair Play</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Each round's crash point is drawn independently before the multiplier starts
+                climbing, targeting a ${Math.round(HOUSE_RTP * 100)}% long-run return to player. The
+                multiplier you see rising is deterministic given that crash point — nothing about
+                the curve changes once a round has begun, and cashing out has no effect on where
+                the round was always going to end.</p>
+              </div>
+            </div>` : ""}
+          `;
+
+          drawCanvas();
+          bind();
+        }
+
+        // ---------------------------------------------------------------
+        // BIND
+        // ---------------------------------------------------------------
+        function refocus(sel) {
+          const el = document.querySelector(sel);
+          if (el) { el.focus(); const v = el.value; el.value = ""; el.value = v; }
+        }
+
+        function bind() {
+          document.querySelector("[data-place]")?.addEventListener("click", placeBet);
+          document.querySelector("[data-cashout]")?.addEventListener("click", () => doCashOut(null, false));
+
+          const betInput = document.querySelector("[data-bet-input]");
+          betInput?.addEventListener("input", (e) => {
+            state.betAmount = e.target.value.replace(/[^0-9.]/g, "");
+            render();
+            refocus("[data-bet-input]");
+          });
+          document.querySelector("[data-half]")?.addEventListener("click", () => {
+            const b = parseFloat(state.betAmount) || 0;
+            state.betAmount = (b / 2).toFixed(2);
+            render();
+          });
+          document.querySelector("[data-double-bet]")?.addEventListener("click", () => {
+            const b = parseFloat(state.betAmount) || 0;
+            state.betAmount = Math.min(b * 2 || 0, Shell.getBalance()).toFixed(2);
+            render();
+          });
+
+          const autoInput = document.querySelector("[data-auto-input]");
+          autoInput?.addEventListener("input", (e) => {
+            state.autoCashoutAt = e.target.value.replace(/[^0-9.]/g, "");
+            state.autoCashoutError = "";
+            refocus("[data-auto-input]");
+          });
+          autoInput?.addEventListener("blur", () => {
+            if (state.autoCashoutAt.trim() === "") { state.autoCashoutError = ""; render(); return; } // empty stays empty — auto cash-out is off
+            const v = parseFloat(state.autoCashoutAt);
+            if (isNaN(v)) {
+              state.autoCashoutError = "Enter a valid number.";
+              render();
+              return;
+            }
+            if (v < 1.01) {
+              state.autoCashoutError = "Value must be 1.01x or higher.";
+              render();
+              return;
+            }
+            const clamped = Math.min(v, MAX_AUTO_CASHOUT);
+            state.autoCashoutAt = clamped.toFixed(2);
+            state.autoCashoutError = "";
+            render();
+          });
+          document.querySelectorAll("[data-auto-step]").forEach((btn) => btn.addEventListener("click", () => {
+            const dir = parseInt(btn.dataset.autoStep, 10);
+            const current = parseFloat(state.autoCashoutAt);
+            const base = !isNaN(current) ? current : 1.01;
+            let next = base + dir;
+            if (next < 1.01) next = 1.01;
+            if (next > MAX_AUTO_CASHOUT) next = MAX_AUTO_CASHOUT;
+            state.autoCashoutAt = next.toFixed(2);
+            state.autoCashoutError = "";
+            render();
+          }));
+
+          document.querySelector("[data-info]")?.addEventListener("click", () => { state.infoOpen = true; render(); });
+          document.querySelector("[data-fair-play]")?.addEventListener("click", () => { state.fairPlayOpen = true; render(); });
+          document.querySelectorAll("[data-modal-close]").forEach((btn) => btn.onclick = () => { state.infoOpen = false; state.fairPlayOpen = false; render(); });
+          document.querySelector("[data-info-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.infoOpen = false; render(); } });
+          document.querySelector("[data-fair-play-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.fairPlayOpen = false; render(); } });
+
+          document.querySelector("[data-settings-toggle]")?.addEventListener("click", () => { state.settingsOpen = !state.settingsOpen; render(); });
+          document.querySelector("[data-toggle-setting]")?.addEventListener("click", (e) => {
+            const key = e.currentTarget.dataset.toggleSetting;
+            state.settings[key] = !state.settings[key];
+            render();
+          });
+          document.querySelector("[data-volume-slider]")?.addEventListener("input", (e) => { state.settings.volume = parseInt(e.target.value, 10); });
+
+          document.querySelector("[data-fav-toggle]")?.addEventListener("click", () => {
+            Shell.toggleFavorite(GAME_ID);
+            state.favorite = Shell.getFavorites().includes(GAME_ID);
+            render();
+          });
+
+          document.querySelector("[data-stats-toggle]")?.addEventListener("click", () => { state.statsOpen = !state.statsOpen; render(); });
+          Shell.bindStatsPanel(state, render);
+
+          document.addEventListener("click", (e) => {
+            if (state.settingsOpen && !e.target.closest("[data-settings-popover]") && !e.target.closest("[data-settings-toggle]")) {
+              state.settingsOpen = false; render();
+            }
+          }, { once: true });
+
+          window.addEventListener("resize", drawCanvas);
+        }
+
+        Shell.attachStatsPanelDrag(state, render);
+
+        // ---------------------------------------------------------------
+        // RESTORE — if a bet was placed and the player navigated away
+        // mid-round (countdown or running), resume the round in place
+        // rather than silently forfeiting the wager.
+        // ---------------------------------------------------------------
+        (function restoreRound() {
+          const saved = Shell.loadActiveRound(GAME_ID);
+          if (!saved) { startCountdown(); return; }
+          state.betAmt = saved.betAmt;
+          state.hasBet = true;
+          state.playedThisRound = true;
+          state.cashedOut = saved.cashedOut;
+          state.cashedOutAt = saved.cashedOutAt;
+          state.autoCashoutAt = saved.autoCashoutAt;
+          state.crashPoint = saved.crashPoint;
+
+          if (saved.phase === ROUND_PHASE.COUNTDOWN) {
+            // countdown time is lost across reloads by design — restart a fresh
+            // countdown for the resumed bet. startCountdown() normally clears
+            // playedThisRound for a new round, but this bet already belongs to
+            // the round in progress, so restore it right after.
+            startCountdown();
+            state.playedThisRound = true;
+          } else if (saved.phase === ROUND_PHASE.RUNNING && saved.roundStart != null) {
+            state.phase = ROUND_PHASE.RUNNING;
+            const elapsedMs = Date.now() - saved.roundStart;
+            state.roundStart = performance.now() - elapsedMs;
+            render();
+            loop();
+          } else {
+            startCountdown();
+            state.playedThisRound = true;
+          }
+        })();
+      })();
+    </script>
+  </body>
+</html>

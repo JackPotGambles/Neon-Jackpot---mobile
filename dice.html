@@ -1,0 +1,1071 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Neon Jackpot fictional arcade demo — Dice" />
+    <title>Dice · Neon Jackpot</title>
+    <link rel="stylesheet" href="./shell.css" />
+    <link rel="stylesheet" href="./game-frame.css" />
+    <style>
+      .game-box.dice-stage {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        background: linear-gradient(160deg, #131a2c, #10131f 60%, #171226);
+      }
+      .dice-stage-top { flex: 1; display: flex; flex-direction: column; justify-content: center; position: relative; z-index: 1; }
+
+      /* ---- recent roll chips, top-right ---- */
+      .dice-recent-row { position: absolute; top: 0; right: 0; z-index: 2; display: flex; gap: 8px; }
+      .dice-recent-chip { display: flex; align-items: center; gap: 6px; padding: 7px 12px; color: #6d7891; background: #171b2c; border: 1px solid var(--line); border-radius: 999px; font-family: var(--mono); font-size: 12px; font-weight: 700; }
+      .dice-recent-chip.win { color: var(--mint); }
+      .dice-recent-chip.new { animation: dice-chip-in .25s ease; }
+      .dice-recent-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: #4c566c; }
+      .dice-recent-dot.win { background: var(--mint); box-shadow: 0 0 6px rgba(92,255,231,.6); }
+      @keyframes dice-chip-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+      @media (max-width: 700px) { .dice-recent-row { position: static; justify-content: flex-end; margin-bottom: 14px; flex-wrap: wrap; } }
+
+      /* ---- hexagon landing marker ---- */
+      .dice-hex-wrap { position: absolute; bottom: calc(100% + 10px); z-index: 3; display: flex; flex-direction: column; align-items: center; opacity: 0; transform: translateY(6px) translateX(-50%); transition: opacity .2s ease, transform .2s ease; pointer-events: none; }
+      .dice-hex-wrap.show { opacity: 1; transform: translateY(0) translateX(-50%); }
+      /* Outer shell: fixed size, never rotates. Sized to the true proportions
+         of a regular (pointy-top) hexagon — width = (sqrt(3)/2) * height —
+         so the shape reads as symmetrical rather than flattened. */
+      .dice-hex-shape {
+        position: relative;
+        display: flex; align-items: center; justify-content: center;
+        width: 52px; height: 60px;
+        color: #131522; font-family: var(--mono); font-weight: 800; font-size: 12.5px;
+      }
+      /* The actual hexagon badge — this is the only part that spins during
+         the roll. A true regular hexagon (6 straight sides, 6 vertices) with
+         only a small corner clip (~5%) for a soft edge — not rounded into a
+         circle. */
+      .dice-hex-face {
+        position: absolute; inset: 0;
+        background: #e7ebf5;
+        clip-path: polygon(
+          47% 1.5%, 53% 1.5%,
+          97% 23.5%, 100% 28%,
+          100% 72%, 97% 76.5%,
+          53% 98.5%, 47% 98.5%,
+          3% 76.5%, 0% 72%,
+          0% 28%, 3% 23.5%
+        );
+        box-shadow: 0 8px 22px rgba(0,0,0,.35);
+        transform-origin: 50% 50%;
+        will-change: transform;
+      }
+      /* Bottom accent lives on its own layer, separate from the rotating
+         face, so it stays visually fixed at the bottom of the badge instead
+         of spinning around the perimeter with the hexagon. */
+      .dice-hex-accent {
+        position: absolute; left: 18%; right: 18%; bottom: 5%; height: 4px;
+        background: #9aa4bd; border-radius: 2px; z-index: 1;
+      }
+      .dice-hex-wrap.win .dice-hex-accent { background: var(--mint); box-shadow: 0 0 10px rgba(92,255,231,.7); }
+      .dice-hex-wrap.lose .dice-hex-accent { background: #ff6a4d; box-shadow: 0 0 10px rgba(255,106,77,.6); }
+      /* The number sits above the face and is never touched by the face's
+         rotation transform, so it stays perfectly upright the whole roll. */
+      .dice-hex-num {
+        position: relative; z-index: 2; pointer-events: none;
+      }
+      .dice-hex-stem { width: 2px; height: 12px; margin-top: 2px; background: repeating-linear-gradient(180deg, #6d7891 0 3px, transparent 3px 6px); }
+      .dice-hex-wrap.win .dice-hex-stem { background: repeating-linear-gradient(180deg, var(--mint) 0 3px, transparent 3px 6px); }
+      .dice-hex-wrap.lose .dice-hex-stem { background: repeating-linear-gradient(180deg, #ff6a4d 0 3px, transparent 3px 6px); }
+
+      .dice-slider-block { position: relative; z-index: 1; width: 100%; max-width: 780px; margin: 0 auto; }
+
+      .dice-ticks { position: relative; display: flex; justify-content: space-between; padding: 0 2px; margin-bottom: 8px; height: 26px; pointer-events: none; }
+      .dice-tick { position: absolute; top: 0; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; color: #6d7891; font-family: var(--mono); font-size: 11px; }
+      .dice-tick::after { content: ""; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid #4c566c; }
+
+      .dice-track-wrap { position: relative; height: 40px; display: flex; align-items: center; padding: 0 14px; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; }
+      .dice-track-bg { position: absolute; left: 14px; right: 14px; height: 12px; border-radius: 999px; overflow: hidden; display: flex; }
+      .dice-track-lose, .dice-track-win { height: 100%; }
+      .dice-track-lose { background: linear-gradient(90deg, #ff8a3d, #ff6a2f); }
+      .dice-track-win { background: linear-gradient(90deg, #3ddc84, #22c55e); }
+
+      .dice-range { position: relative; z-index: 2; width: 100%; height: 40px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+      .dice-range::-webkit-slider-runnable-track { -webkit-appearance: none; height: 40px; background: transparent; }
+      .dice-range::-moz-range-track { height: 40px; background: transparent; border: 0; }
+      .dice-range::-webkit-slider-thumb {
+        -webkit-appearance: none; appearance: none;
+        width: 34px; height: 34px; margin-top: 3px;
+        background: #fff; border: 5px solid #10131f; border-radius: 10px;
+        box-shadow: 0 6px 16px rgba(0,0,0,.45);
+        cursor: grab;
+      }
+      .dice-range::-moz-range-thumb {
+        width: 24px; height: 24px; background: #fff; border: 5px solid #10131f; border-radius: 10px;
+        box-shadow: 0 6px 16px rgba(0,0,0,.45); cursor: grab;
+      }
+      .dice-range:disabled { cursor: not-allowed; }
+
+      .dice-big-readout { position: relative; z-index: 1; margin: 18px 0 0; text-align: center; font-family: var(--mono); font-size: 30px; font-weight: 800; color: #eef3f8; letter-spacing: -.01em; }
+
+      /* ---- bottom stat row — floating label+value pairs directly on the game background,
+         no bordered card/strip, matching the reference design ---- */
+      .win-loss-label { color: #6d7891; font-size: 13px; font-weight: 600; white-space: nowrap; }
+      .win-loss-row {
+        position: relative;
+        display: flex !important;
+        align-items: center !important;
+        gap: 10px;
+        padding: 12px 14px; border-radius: 10px;
+        background: rgba(255,255,255,.035);
+      }
+      /* The external stylesheet was built for a 2-child row (button + input),
+         positioning the button absolutely over the input. Now that there are
+         four children (button, label, input, suffix) that layout has to be
+         fully overridden — every child is forced static + into a normal flex
+         flow so nothing overlaps. */
+      .win-loss-row > * { position: static !important; top: auto !important; left: auto !important; transform: none !important; margin: 0 !important; }
+      .win-loss-row .reset-chip { flex: none !important; }
+      .win-loss-row .win-loss-label { flex: 1 1 auto !important; }
+      .win-loss-row input {
+        flex: 0 0 64px !important;
+        width: 64px !important;
+        text-align: right !important;
+        background: transparent !important; border: 0 !important; padding: 0 !important;
+        color: #eef3f8; font-family: var(--mono); font-size: 14px; font-weight: 700;
+        outline: none !important; box-shadow: none !important; -webkit-appearance: none; appearance: none;
+      }
+      .win-loss-row input:focus { outline: none !important; box-shadow: none !important; }
+      .win-loss-row input::placeholder { color: #6d7891; opacity: 1; font-weight: 700; }
+      .win-loss-row .win-loss-suffix { flex: none !important; color: #6d7891; font-family: var(--mono); font-size: 12px; }
+
+      .dice-stat-strip {
+        position: relative; z-index: 1;
+        display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;
+        margin: 22px 0 0;
+      }
+      .dice-stat-strip .stat-field { padding: 0; }
+      .dice-stat-strip label, .stat-field-btn label { display: block; margin-bottom: 8px; color: #8791a6; font-size: 11.5px; font-weight: 700; }
+      .dice-stat-strip .stat-field-row {
+        display: flex; align-items: center; gap: 8px;
+        padding: 12px 14px; border-radius: 10px;
+        background: rgba(255,255,255,.035);
+      }
+      .dice-stat-strip .stat-field-row input {
+        flex: 1; min-width: 0; background: transparent; border: 0; padding: 0;
+        font-family: var(--mono); color: #eef3f8; font-size: 14px; font-weight: 700;
+      }
+      .dice-stat-strip .stat-field-row .clear-x { flex: none; color: #6d7891; background: transparent; border: 0; }
+      .dice-stat-strip .stat-field-row .suffix { flex: none; color: #6d7891; font-family: var(--mono); font-size: 12px; }
+
+      .stat-field-btn {
+        display: block; width: 100%; text-align: left;
+        background: transparent; border: 0; padding: 0; cursor: pointer;
+        font-family: inherit; color: inherit;
+      }
+      .stat-field-btn:disabled { cursor: not-allowed; opacity: .6; }
+      .stat-field-btn .stat-field-row { background: rgba(255,255,255,.035); }
+      .stat-field-btn:hover:not(:disabled) .stat-field-row { background: rgba(255,255,255,.06); }
+      .stat-field-value {
+        flex: 1; min-width: 0;
+        font-family: var(--mono); color: #eef3f8; font-size: 14px; font-weight: 700;
+      }
+
+      /* ---- demo/payout box between bet amount and place-bet button ---- */
+      .demo-payout-box { margin-top: 14px; border: 1px dashed rgba(92,255,231,.35); border-radius: 10px; overflow: hidden; }
+      .demo-payout-top { padding: 9px 0 7px; text-align: center; color: var(--mint); font-size: 11px; font-weight: 800; letter-spacing: .06em; }
+      .demo-payout-top.amt { color: var(--mint); font-family: var(--mono); font-size: 16px; letter-spacing: 0; }
+      .demo-payout-bottom { padding: 9px 0; text-align: center; color: #cdd4e2; font-size: 12px; font-weight: 700; background: rgba(255,255,255,.03); }
+
+      @media (max-width: 900px) {
+        .dice-slider-block { max-width: 100%; }
+        .dice-stat-strip { grid-template-columns: 1fr; gap: 10px; margin: 18px 0 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="site-shell">
+      <div class="site-grid">
+        <div id="site-sidebar"></div>
+        <div id="site-topbar"></div>
+        <div id="page-content"></div>
+      </div>
+    </div>
+    <script src="./promo-vault.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="./chat.js"></script>
+    <script src="./shell.js"></script>
+    <script src="./games.js"></script>
+    <script>
+      (() => {
+        // ---------------------------------------------------------------
+        // 1) IDENTITY
+        // ---------------------------------------------------------------
+        const GAME_NAME = "Dice";
+        const GAME_ID   = "dice";
+        const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+        Shell.mount({ activeTab: "Games" });
+        Chat.mount();
+        document.addEventListener("nj:animations", (e) => { state.settings.animations = !e.detail; render(); });
+        const content = document.getElementById("page-content");
+        const svg = Shell.svg;
+
+        // ---------------------------------------------------------------
+        // 2) STATE
+        // ---------------------------------------------------------------
+        const HOUSE_EDGE = 0.01; // ~99% RTP, matches the rest of the site's odds
+        const MIN_CHANCE = 0.01;
+        const MAX_CHANCE = 98;
+
+        function randHex() { return Math.floor(Math.random() * 0xffff).toString(16).padStart(4, "0"); }
+
+        const state = {
+          mode: "manual",        // "manual" | "auto"
+          betAmount: "",
+          busy: false,
+          lastResult: null,      // { won, profit, payoutLabel, roll, mult } or null
+          recent: [],            // [{ roll, won }]
+          infoOpen: false,
+          fairPlayOpen: false,
+          settingsOpen: false,
+          statsOpen: false,
+          favorite: Shell.getFavorites().includes(GAME_ID),
+          settings: { animations: !Shell.isAnimationsDisabled(), volume: 100 },
+
+          statsGame: "all",
+          statsGameDropdownOpen: false,
+          statsDrag: null,
+          statsPos: null,
+
+          clientSeed: `${randHex()}-${randHex()}-${randHex()}-${randHex()}`,
+          seedSpinning: false,
+
+          threshold: 50,         // the roll-over / roll-under line
+          rollMode: "over",      // "over" | "under"
+          lastMarkerPct: null,   // where the hex marker last landed — null means it hasn't rolled yet this session, so the next roll starts from the middle (50)
+          recentJustAdded: false, // true for exactly one render right after a new recent-chip is pushed, so only that chip plays its entrance animation
+
+          auto: {
+            running: false,
+            numBets: "",
+            betsRemaining: null,
+            onWinPct: "",
+            onLossPct: "",
+            stopOnProfit: "",
+            stopOnLoss: "",
+            currentProfit: 0,
+            lastGameProfit: 0,
+            baseBet: null,
+          },
+        };
+
+        // ---------------------------------------------------------------
+        // Odds math — threshold <-> win chance <-> multiplier all derive
+        // from one another. Whichever field the player edits recomputes
+        // the other two live, as they type.
+        // ---------------------------------------------------------------
+        function winChanceFromThreshold(threshold, mode) {
+          return mode === "over" ? (100 - threshold) : threshold;
+        }
+        function thresholdFromWinChance(chance, mode) {
+          return mode === "over" ? (100 - chance) : chance;
+        }
+        function multiplierFromChance(chance) {
+          return (100 - HOUSE_EDGE * 100) / chance;
+        }
+        function chanceFromMultiplier(mult) {
+          return (100 - HOUSE_EDGE * 100) / mult;
+        }
+        function clampChance(c) { return clamp(c, MIN_CHANCE, MAX_CHANCE); }
+
+        // Keeps a text input to a valid signed decimal: an optional leading
+        // "-" (so on-win/on-loss percentages can go negative — e.g. -100
+        // halves the bet), digits, and at most one decimal point.
+        function sanitizeSignedDecimal(raw) {
+          let s = raw.replace(/[^0-9.\-]/g, "");
+          const negative = s.startsWith("-");
+          s = s.replace(/-/g, "");
+          const firstDot = s.indexOf(".");
+          if (firstDot !== -1) s = s.slice(0, firstDot + 1) + s.slice(firstDot + 1).replace(/\./g, "");
+          return (negative ? "-" : "") + s;
+        }
+
+        // ---------------------------------------------------------------
+        // Single source of truth for value -> X position on the bar.
+        //
+        // .dice-track-wrap has 14px of padding on each side, and the colored
+        // track (.dice-track-bg) is drawn inset by that same 14px — so "0"
+        // and "100" don't sit at the literal edges of the wrap, they sit at
+        // the edges of the inset track. Any element that positions itself
+        // with a plain `left: value%` (relative to the wrap's full width,
+        // uninset) will therefore land in the wrong spot compared to the
+        // colored track underneath it — which is exactly what caused the
+        // dice/marker misalignment.
+        //
+        // Every value -> position conversion in this file (tick labels, the
+        // idle/target marker, and the animated dice) must go through this
+        // one function so they can never drift apart again.
+        // ---------------------------------------------------------------
+        const TRACK_INSET_PX = 14;
+        function valueToPosition(value) {
+          const v = clamp(value, 0, 100);
+          return `calc(${TRACK_INSET_PX}px + (100% - ${TRACK_INSET_PX * 2}px) * ${v / 100})`;
+        }
+        function clampThreshold(t) { return clamp(t, MIN_CHANCE, 100 - MIN_CHANCE); }
+
+        function setThreshold(t) {
+          state.threshold = Math.round(clampThreshold(t) * 100) / 100;
+        }
+        function setWinChance(c) {
+          const chance = clampChance(c);
+          setThreshold(thresholdFromWinChance(chance, state.rollMode));
+        }
+        function setMultiplier(m) {
+          const mult = Math.max(1.0102, m);
+          setWinChance(chanceFromMultiplier(mult));
+        }
+
+        // ---------------------------------------------------------------
+        // 3) ROUND LOGIC
+        // ---------------------------------------------------------------
+        function playRound(betAmount) {
+          const roll = Math.round(Math.random() * 10000) / 100; // 0.00 - 100.00
+          const chance = winChanceFromThreshold(state.threshold, state.rollMode);
+          const mult = multiplierFromChance(chance);
+          const won = state.rollMode === "over" ? roll > state.threshold : roll < state.threshold;
+          const profit = betAmount === 0 ? 0 : (won ? betAmount * (mult - 1) : -betAmount);
+          return { won, profit, payoutLabel: won ? `${mult.toFixed(4)}x` : "0.00x", roll, mult };
+        }
+
+        // Every settled round — win, lose, OR demo (bet 0) — records once, mirroring the rest of
+        // the site (Limbo/Blackjack log demo rounds with bet:0/profit:0 too). This is also what
+        // keeps the live-stats graph populated even before the very first real dice bet.
+        function recordBet(betAmount, result) {
+          Shell.addBetEntry({
+            game: GAME_ID, bet: betAmount, won: result.won, profit: result.profit,
+            detail: { type: "dice", roll: result.roll, mode: state.rollMode, target: state.threshold },
+          });
+          if (result.profit !== 0) Shell.addBalance(result.profit);
+        }
+        function pushRecent(result) {
+          state.recent.unshift({ roll: result.roll, won: result.won });
+          if (state.recent.length > 5) state.recent.length = 5;
+          state.recentJustAdded = true;
+        }
+
+        function currentBetAmount() {
+          const raw = parseFloat(state.betAmount);
+          return state.betAmount !== "" && !isNaN(raw) && raw > 0 ? raw : 0;
+        }
+
+        // ---------------------------------------------------------------
+        // Slide the hex marker from wherever it currently sits to its new
+        // landing spot — not from the far left every time. On the very
+        // first roll of a fresh session (nothing has landed yet) it starts
+        // from the middle of the bar (50), which looks natural since that's
+        // where the idle marker sits before any bet is placed. After that,
+        // each roll continues from the previous roll's landing spot, which
+        // reads as the marker actually traveling around the bar rather than
+        // resetting to one edge every single time.
+        //
+        // onLanded fires exactly when the CSS transition finishes, so the
+        // caller can time the win-ding / result reveal to the instant the
+        // marker actually stops moving, instead of guessing at a delay.
+        // ---------------------------------------------------------------
+        const HEX_MOVE_MS = 650; // was 950ms — lands in the requested ~600-800ms window, quick and responsive
+
+        // Weighted ease-in-out curve — slow start, fast middle, slow finish.
+        // Quintic rather than cubic so the acceleration/deceleration feels
+        // like it's overcoming real momentum instead of a gentle CSS ease.
+        function easeInOutQuint(t) {
+          return t < 0.5 ? 16 * t * t * t * t * t : 1 - Math.pow(-2 * t + 2, 5) / 2;
+        }
+
+        // Drives position, rotation, and the live number readout off a single
+        // rAF-ticked progress value so all three stay perfectly synchronized:
+        // the hex only ever moves horizontally (left %), the shape spins in
+        // place (rotation, not the wrapper — so the stem/pointer never swings),
+        // and the displayed number is interpolated straight from the current
+        // eased position rather than snapping at the end. Rotation speed is
+        // derived from the same eased curve as position (rotation = spins *
+        // eased(t)), so it naturally speeds up/slows down with the movement
+        // and lands on an exact multiple of 360° — visually upright, with no
+        // extra "settle" step needed.
+        // Tracks the in-flight rAF loop so a new roll (or a mid-roll settings
+        // change) can never leave a stale tick running alongside a new one.
+        let hexAnimFrame = null;
+
+        function animateHexMarker(landingPct, onLanded) {
+          const el = document.getElementById("dice-hex-marker");
+          if (!el) { if (onLanded) onLanded(); return; }
+          if (hexAnimFrame != null) { cancelAnimationFrame(hexAnimFrame); hexAnimFrame = null; }
+
+          // The face is the only piece that rotates; the number is a sibling
+          // layer that's never touched by the rotation transform, so it stays
+          // perfectly upright the whole time the hexagon is spinning.
+          const faceEl = el.querySelector(".dice-hex-face");
+          const numEl = el.querySelector(".dice-hex-num");
+          const startPct = state.lastMarkerPct != null ? state.lastMarkerPct : 50;
+          const distance = Math.abs(landingPct - startPct);
+          // Fast, energetic spin — several full rotations, with more added
+          // for longer travel so big jumps feel like they're really flying.
+          const spins = 6 + Math.min(distance / 100, 1) * 4;
+
+          el.style.transition = "none";
+          el.style.left = valueToPosition(startPct);
+          if (faceEl) faceEl.style.transition = "none";
+          state.lastMarkerPct = landingPct;
+
+          // Animations off: snap straight to the final state. Still resolved
+          // on a rAF tick (rather than synchronously) so callers see the same
+          // "next frame" timing whether animations are on or off — this is
+          // what keeps state resetting correctly after every roll regardless
+          // of how many times the toggle has been flipped.
+          if (!state.settings.animations) {
+            hexAnimFrame = requestAnimationFrame(() => {
+              hexAnimFrame = null;
+              el.style.left = valueToPosition(landingPct);
+              if (faceEl) faceEl.style.transform = "rotate(0deg)";
+              if (numEl) numEl.textContent = landingPct.toFixed(2);
+              if (onLanded) onLanded();
+            });
+            return;
+          }
+
+          const start = performance.now();
+
+          function tick(now) {
+            const t = Math.min(1, (now - start) / HEX_MOVE_MS);
+            const eased = easeInOutQuint(t);
+            const pct = startPct + (landingPct - startPct) * eased;
+
+            el.style.left = valueToPosition(pct); // horizontal only — Y never changes; same mapping as everything else on the bar
+            // Rotation is driven by the same eased(t) as position, so its
+            // speed is tied to movement speed: slow off the start, fastest
+            // through the middle, slowing back down as it settles — and
+            // always landing on an exact multiple of 360° (upright).
+            if (faceEl) faceEl.style.transform = `rotate(${spins * 360 * eased}deg)`;
+            if (numEl) numEl.textContent = pct.toFixed(2); // number tracks position every frame
+
+            if (t < 1) {
+              hexAnimFrame = requestAnimationFrame(tick);
+            } else {
+              hexAnimFrame = null;
+              // Land exactly on target with zero rotation offset — no bounce, no overshoot.
+              el.style.left = valueToPosition(landingPct);
+              if (faceEl) faceEl.style.transform = "rotate(0deg)";
+              if (numEl) numEl.textContent = landingPct.toFixed(2);
+              if (onLanded) onLanded();
+            }
+          }
+          hexAnimFrame = requestAnimationFrame(tick);
+        }
+
+        function placeBet() {
+          if (state.busy) return;
+          const amt = Math.round(currentBetAmount() * 100) / 100;
+          if (amt > 0 && amt > Shell.getBalance()) { Shell.notify("Insufficient balance."); return; }
+          if (amt > 0 && Shell.isBelowMinBet(amt)) { Shell.notify("Minimum bet is $0.10."); return; }
+
+          const result = playRound(amt);
+          state.busy = true;
+          state.lastResult = null;
+          render();
+          Shell.playDiceRollSound(HEX_MOVE_MS, state.settings.volume);
+          animateHexMarker(result.roll, () => {
+            recordBet(amt, result);
+            pushRecent(result);
+            state.lastResult = result;
+            state.busy = false;
+            render();
+            state.recentJustAdded = false;
+            if (result.won) Shell.playWinDing(state.settings.volume);
+          });
+        }
+
+        // ---------------------------------------------------------------
+        // AUTO MODE
+        // ---------------------------------------------------------------
+        function startAuto() {
+          const auto = state.auto;
+          const requestedBet = currentBetAmount();
+          const balance = Shell.getBalance();
+          if (requestedBet > 0 && (balance <= 0 || requestedBet > balance)) { render(); return; }
+          if (requestedBet > 0 && Shell.isBelowMinBet(requestedBet)) { Shell.notify("Minimum bet is $0.10."); render(); return; }
+          const num = parseInt(auto.numBets, 10);
+          auto.betsRemaining = auto.numBets.trim() !== "" && !isNaN(num) && num > 0 ? num : null;
+          auto.running = true;
+          auto.currentProfit = 0;
+          auto.lastGameProfit = 0;
+          auto.baseBet = requestedBet;
+          render();
+          runAutoStep();
+        }
+        function stopAuto() { state.auto.running = false; render(); }
+
+        function runAutoStep() {
+          const auto = state.auto;
+          if (!auto.running) return;
+          if (auto.betsRemaining !== null && auto.betsRemaining <= 0) { stopAuto(); return; }
+
+          const betAmount = Math.min(currentBetAmount(), Shell.getBalance() || Infinity);
+          if (betAmount > 0 && betAmount > Shell.getBalance()) { stopAuto(); return; }
+          if (betAmount > 0 && Shell.isBelowMinBet(betAmount)) { stopAuto(); return; }
+
+          const result = playRound(betAmount);
+          state.busy = true;
+          render();
+          Shell.playDiceRollSound(HEX_MOVE_MS, state.settings.volume);
+
+          animateHexMarker(result.roll, () => {
+            recordBet(betAmount, result);
+            pushRecent(result);
+            state.lastResult = result;
+            auto.currentProfit += result.profit;
+            auto.lastGameProfit = result.profit;
+            if (result.won) Shell.playWinDing(state.settings.volume);
+
+            // Behavior is driven purely by the percentage field, and only by
+            // it: a blank/0 field means the bet amount is left completely
+            // untouched on that outcome — it does NOT get reset to the base
+            // bet on its own. Only an explicit non-zero percentage the player
+            // actually typed adjusts the bet: positive increases it, negative
+            // decreases it. A percentage of -100 or steeper floors the bet at
+            // 0 — since you can't place a real $0 bet, that 0 amount is what
+            // the rest of the app already treats as "demo mode" (see
+            // currentBetAmount/betAmt checks below), so auto-betting simply
+            // continues on as demo instead of hard-stopping.
+            if (result.won) {
+              const pct = parseFloat(auto.onWinPct) || 0;
+              if (pct !== 0) {
+                const next = betAmount * Math.max(0, 1 + pct / 100);
+                state.betAmount = next.toFixed(2);
+              }
+            } else {
+              const pct = parseFloat(auto.onLossPct) || 0;
+              if (pct !== 0) {
+                const next = betAmount * Math.max(0, 1 + pct / 100);
+                state.betAmount = next.toFixed(2);
+              }
+            }
+
+            if (auto.betsRemaining !== null) auto.betsRemaining -= 1;
+            state.busy = false;
+
+            const stopProfit = parseFloat(auto.stopOnProfit);
+            const stopLoss = parseFloat(auto.stopOnLoss);
+            let shouldStop = false;
+            if (!isNaN(stopProfit) && stopProfit > 0 && auto.currentProfit >= stopProfit) shouldStop = true;
+            if (!isNaN(stopLoss) && stopLoss > 0 && auto.currentProfit <= -stopLoss) shouldStop = true;
+            if (auto.betsRemaining !== null && auto.betsRemaining <= 0) shouldStop = true;
+
+            render();
+            state.recentJustAdded = false;
+            if (shouldStop || !auto.running) { stopAuto(); return; }
+            setTimeout(runAutoStep, 700);
+          });
+        }
+
+        // ---------------------------------------------------------------
+        // live-stats helpers — same "All games" default + dropdown filter
+        // pattern used on Limbo/Blackjack, so the graph has data to show
+        // even before this specific game has been played.
+        //
+        // KNOWN_GAME_IDS guards against bad entries in the shared bet log —
+        // e.g. if _game-template.html was ever opened directly with its
+        // placeholder identity still in place, it would have logged bets
+        // under the literal string "«gameid»", which otherwise persists in
+        // localStorage and shows up as a bogus entry forever. We filter any
+        // entry whose game id isn't a real, known game out of both "All"
+        // and the per-game dropdown/legend, so a bad past entry can't keep
+        // surfacing even though we can't reach into the user's browser
+        // storage to delete it directly.
+        // ---------------------------------------------------------------
+        const KNOWN_GAME_IDS = new Set((Array.isArray(window.GAME_CATALOG) ? window.GAME_CATALOG : []).map((g) => g.id));
+        function filteredBetLog(game) {
+          const log = Shell.getBetLog().filter((b) => KNOWN_GAME_IDS.has(b.game));
+          if (!log.length) return [];
+          return !game || game === "all" ? log : log.filter((b) => b.game === game);
+        }
+        function playedGamesList() {
+          const seen = new Set(Shell.getBetLog().map((b) => b.game).filter((g) => KNOWN_GAME_IDS.has(g)));
+          return Array.from(seen);
+        }
+        const GAME_NAMES = { blackjack: "Blackjack", limbo: "Limbo", dice: "Dice", keno: "Keno", plinko: "Plinko" };
+
+        window.addEventListener("mousemove", (e) => {
+          if (!state.statsDrag) return;
+          const panel = document.querySelector("[data-stats-popover]");
+          const panelW = panel ? panel.offsetWidth : 360, panelH = panel ? panel.offsetHeight : 360;
+          const left = clamp(e.clientX - state.statsDrag.offsetX, 8, window.innerWidth - panelW - 8);
+          const top = clamp(e.clientY - state.statsDrag.offsetY, 8, window.innerHeight - panelH - 8);
+          state.statsPos = { left, top };
+          if (panel) { panel.style.left = left + "px"; panel.style.top = top + "px"; }
+        });
+        window.addEventListener("mouseup", () => {
+          if (!state.statsDrag) return;
+          state.statsDrag = null;
+          document.querySelector("[data-stats-popover]")?.classList.remove("dragging");
+        });
+
+        // ---------------------------------------------------------------
+        // 4) RENDER
+        // ---------------------------------------------------------------
+        function demoPayoutBoxHTML(betAmount, mult) {
+          const demo = betAmount <= 0;
+          if (demo) {
+            return `<div class="demo-payout-box"><div class="demo-payout-top">DEMO MODE</div><div class="demo-payout-bottom">Payout</div></div>`;
+          }
+          return `<div class="demo-payout-box"><div class="demo-payout-top amt">${Shell.fmtMoney(betAmount * mult)}</div><div class="demo-payout-bottom">Payout</div></div>`;
+        }
+
+        function render() {
+          const balance = Shell.getBalance();
+          const betAmt = currentBetAmount();
+          const insufficientBalance = betAmt > 0 && betAmt > balance;
+          const belowMinBet = betAmt > 0 && Shell.isBelowMinBet(betAmt);
+          const r = state.lastResult;
+          const auto = state.auto;
+
+          const chance = winChanceFromThreshold(state.threshold, state.rollMode);
+          const mult = multiplierFromChance(chance);
+          const thresholdPct = state.threshold;
+
+          const loseWidth = state.rollMode === "over" ? thresholdPct : (100 - thresholdPct);
+          const winWidth = 100 - loseWidth;
+          const loseFirst = state.rollMode === "over";
+
+          const markerPct = r ? r.roll : thresholdPct;
+          const markerClass = r ? (r.won ? "win" : "lose") : "";
+
+          const numBetsGreyed = auto.numBets.trim() === "";
+          const betsRemainingDisplay = auto.betsRemaining === null ? "" : String(auto.betsRemaining);
+
+          content.innerHTML = `
+            <div class="game-page">
+              <div class="game-shell">
+                <div class="shell-grid">
+
+                  <header class="title-bar">
+                    <button class="game-icon-btn hover-tip" data-hover-tip="Game info" data-info>${svg("safe")}</button>
+                    <div class="title-name">${svg("grid")} ${GAME_NAME}</div>
+                    <button class="fair-play-btn" data-fair-play>${svg("safe")} Fair Play</button>
+                  </header>
+
+                  <aside class="sidebar">
+                    <div class="mode-toggle">
+                      <button class="mode-btn ${state.mode === "manual" ? "active" : ""}" data-mode-manual ${auto.running ? "disabled" : ""}>Manual</button>
+                      <button class="mode-btn ${state.mode === "auto" ? "active" : ""}" data-mode-auto ${auto.running ? "disabled" : ""}>Auto</button>
+                    </div>
+
+                    <div class="field-label">Bet Amount</div>
+                    <div class="bet-input-row">
+                      <span class="prefix">$</span>
+                      <input type="text" inputmode="decimal" placeholder="0.00" value="${state.betAmount}" data-bet-input class="${(insufficientBalance || belowMinBet) ? "error" : ""}" ${state.busy || auto.running ? "disabled" : ""}>
+                      <div class="bet-quick">
+                        <button data-half ${state.busy || auto.running ? "disabled" : ""}>½</button>
+                        <button data-double-bet ${state.busy || auto.running ? "disabled" : ""}>2×</button>
+                      </div>
+                    </div>
+                    ${insufficientBalance ? `<div class="balance-error">Insufficient balance</div>` : (belowMinBet ? `<div class="balance-error">Minimum bet is $0.10</div>` : "")}
+
+                    ${demoPayoutBoxHTML(betAmt, mult)}
+
+                    ${state.mode === "auto" ? `
+                    <div class="field-label row"><span>Number of Bets</span></div>
+                    <div class="plain-input-row">
+                      ${numBetsGreyed ? `<span class="infinity-icon">∞</span>` : ""}
+                      <input type="text" inputmode="numeric" class="${numBetsGreyed ? "greyed with-icon" : ""}" placeholder="Infinite" value="${auto.running ? betsRemainingDisplay : auto.numBets}" data-num-bets ${auto.running ? "disabled" : ""}>
+                    </div>
+
+                    <div class="field-label">On Win</div>
+                    <div class="win-loss-row">
+                      <button class="reset-chip" data-win-reset ${auto.running ? "disabled" : ""}>${svg("rotate")} Reset</button>
+                      <span class="win-loss-label">Increase By</span>
+                      <input type="text" inputmode="text" placeholder="0.00" value="${auto.onWinPct}" data-win-pct ${auto.running ? "disabled" : ""}>
+                      <span class="win-loss-suffix">%</span>
+                    </div>
+
+                    <div class="field-label">On Loss</div>
+                    <div class="win-loss-row">
+                      <button class="reset-chip" data-loss-reset ${auto.running ? "disabled" : ""}>${svg("rotate")} Reset</button>
+                      <span class="win-loss-label">Increase By</span>
+                      <input type="text" inputmode="text" placeholder="0.00" value="${auto.onLossPct}" data-loss-pct ${auto.running ? "disabled" : ""}>
+                      <span class="win-loss-suffix">%</span>
+                    </div>
+
+                    <div class="field-label row"><span>Stop On Profit</span><span>Stop On Loss</span></div>
+                    <div class="two-col">
+                      <div class="stop-input-row"><input type="text" inputmode="decimal" placeholder="0.00" value="${auto.stopOnProfit}" data-stop-profit ${auto.running ? "disabled" : ""}></div>
+                      <div class="stop-input-row"><input type="text" inputmode="decimal" placeholder="0.00" value="${auto.stopOnLoss}" data-stop-loss ${auto.running ? "disabled" : ""}></div>
+                    </div>
+
+                    <div class="auto-info-box">
+                      <div><span>Current Profit</span><strong class="${auto.currentProfit >= 0 ? "positive" : "negative"}">${auto.currentProfit >= 0 ? "+$" : "-$"}${Math.abs(auto.currentProfit).toFixed(2)}</strong></div>
+                      <div><span>Last Game Profit</span><strong class="${auto.lastGameProfit >= 0 ? "positive" : "negative"}">${auto.lastGameProfit >= 0 ? "+$" : "-$"}${Math.abs(auto.lastGameProfit).toFixed(2)}</strong></div>
+                    </div>
+
+                    <button class="place-bet-btn ${auto.running ? "stop" : (betAmt > 0 ? "" : "demo")}" data-auto-toggle ${(!insufficientBalance && !belowMinBet) || auto.running ? "" : "disabled"}>
+                      ${auto.running ? "Stop Auto Bet" : (betAmt > 0 ? "Start Auto Bet" : "Start Demo Auto Bet")}
+                    </button>
+                    ${betAmt > 0 ? "" : `<div class="demo-hint-wrap"><div class="demo-hint">Enter Bet Amount For Real Play</div></div>`}
+                    ` : `
+                    <button class="place-bet-btn ${state.busy ? "busy" : (betAmt > 0 ? "" : "demo")}" data-place ${state.busy || insufficientBalance || belowMinBet ? "disabled" : ""}>
+                      ${state.busy ? "Rolling…" : (betAmt > 0 ? "Place Bet" : "Place Demo Bet")}
+                    </button>
+                    ${betAmt > 0 ? "" : `<div class="demo-hint-wrap"><div class="demo-hint">Enter Bet Amount For Real Play</div></div>`}
+                    `}
+
+                    <div class="sidebar-meta">
+                      <div class="sidebar-meta-row"><span>Balance</span><strong>${Shell.fmtMoney(balance)}</strong></div>
+                    </div>
+                  </aside>
+
+                  <section class="game-box dice-stage">
+                    <div class="dice-stage-top">
+                      <div class="dice-recent-row">
+                        ${state.recent.map((rr, i) => `<div class="dice-recent-chip ${rr.won ? "win" : ""} ${i === 0 && state.recentJustAdded ? "new" : ""}"><span class="dice-recent-dot ${rr.won ? "win" : ""}"></span>${rr.roll.toFixed(2)}</div>`).join("")}
+                      </div>
+
+                      <div class="dice-slider-block">
+                        <div class="dice-ticks">
+                          <div class="dice-tick" style="left:${valueToPosition(25)};">25</div>
+                          <div class="dice-tick" style="left:${valueToPosition(50)};">50</div>
+                          <div class="dice-tick" style="left:${valueToPosition(75)};">75</div>
+                        </div>
+
+                        <div class="dice-track-wrap">
+                          <div class="dice-track-bg">
+                            ${loseFirst
+                              ? `<div class="dice-track-lose" style="width:${loseWidth}%;"></div><div class="dice-track-win" style="width:${winWidth}%;"></div>`
+                              : `<div class="dice-track-win" style="width:${winWidth}%;"></div><div class="dice-track-lose" style="width:${loseWidth}%;"></div>`}
+                          </div>
+
+                          ${r ? `
+                          <div class="dice-hex-wrap show ${markerClass}" id="dice-hex-marker" style="left:${valueToPosition(markerPct)};">
+                            <div class="dice-hex-shape">
+                              <div class="dice-hex-face"></div>
+                              <div class="dice-hex-accent"></div>
+                              <span class="dice-hex-num">${r.roll.toFixed(2)}</span>
+                            </div>
+                            <div class="dice-hex-stem"></div>
+                          </div>` : `
+                          <div class="dice-hex-wrap ${state.busy ? "show" : ""}" id="dice-hex-marker" style="left:${valueToPosition(thresholdPct)};">
+                            <div class="dice-hex-shape">
+                              <div class="dice-hex-face"></div>
+                              <div class="dice-hex-accent"></div>
+                              <span class="dice-hex-num">${thresholdPct.toFixed(2)}</span>
+                            </div>
+                            <div class="dice-hex-stem"></div>
+                          </div>`}
+
+                          <input type="range" class="dice-range" min="2" max="98" step="1" value="${Math.round(clamp(thresholdPct, 2, 98))}" data-dice-slider ${state.busy || auto.running ? "disabled" : ""}>
+                        </div>
+
+                        <div class="dice-big-readout">${thresholdPct.toFixed(2)}</div>
+                      </div>
+                    </div>
+
+                    <div class="dice-stat-strip">
+                      <div class="stat-field">
+                        <label>Multiplier</label>
+                        <div class="stat-field-row">
+                          <input type="text" inputmode="decimal" value="${mult.toFixed(4)}" data-mult-input ${state.busy || auto.running ? "disabled" : ""}>
+                          <button class="clear-x" data-mult-clear title="Reset">${svg("x")}</button>
+                        </div>
+                      </div>
+                      <button class="stat-field stat-field-btn" data-mode-toggle title="Switch over/under" ${state.busy || auto.running ? "disabled" : ""}>
+                        <label>Roll ${state.rollMode === "over" ? "Over" : "Under"}</label>
+                        <div class="stat-field-row">
+                          <span class="stat-field-value">${state.threshold.toFixed(2)}</span>
+                          <span class="clear-x">${svg("rotate")}</span>
+                        </div>
+                      </button>
+                      <div class="stat-field">
+                        <label>Win Chance</label>
+                        <div class="stat-field-row">
+                          <input type="text" inputmode="decimal" value="${chance.toFixed(2)}" data-chance-input ${state.busy || auto.running ? "disabled" : ""}>
+                          <span class="suffix">%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <footer class="bottom-bar">
+                    <div class="bottom-icons">
+                      <div style="position:relative;">
+                        <button class="bottom-icon-btn ${state.settingsOpen ? "active" : ""}" data-settings-toggle title="Settings">${svg("settings")}</button>
+                        ${state.settingsOpen ? `
+                        <div class="popover" data-settings-popover>
+                          <div class="popover-title">Game Settings</div>
+                          <div class="popover-row"><span>Animations</span><button class="switch ${state.settings.animations ? "on" : ""}" data-toggle-setting="animations" ${Shell.isAnimationsDisabled() ? "disabled" : ""}></button></div>
+                          <div class="volume-row"><span>Volume — ${state.settings.volume}%</span><input type="range" min="0" max="100" value="${state.settings.volume}" data-volume-slider></div>
+                        </div>` : ""}
+                      </div>
+                      <button class="bottom-icon-btn ${state.favorite ? "fav-on" : ""}" data-fav-toggle title="Favorite">${svg("heart")}</button>
+                      <button class="bottom-icon-btn ${state.statsOpen ? "active" : ""}" data-stats-toggle title="Live stats">${svg("activity")}</button>
+                    </div>
+                    <div class="bottom-logo">Neon Jackpot</div>
+                  </footer>
+                </div>
+
+                ${state.statsOpen ? (() => {
+                  const rangeLog = filteredBetLog(state.statsGame);
+                  const rangeProfit = rangeLog.reduce((sum, b) => sum + b.profit, 0);
+                  const rangeWagered = rangeLog.reduce((sum, b) => sum + b.bet, 0);
+                  const rangeWins = rangeLog.filter((b) => b.won).length;
+                  const rangeLosses = rangeLog.filter((b) => !b.won).length;
+                  const played = playedGamesList();
+                  const currentLabel = state.statsGame === "all" ? "All" : (GAME_NAMES[state.statsGame] || state.statsGame);
+                  const chart = Shell.chartSvgHTML(rangeLog);
+                  window.__diceLastChart = chart;
+                  return `<div class="stats-panel" data-stats-popover style="left:${state.statsPos?.left ?? 40}px; top:${state.statsPos?.top ?? 80}px;">
+                    <div class="stats-head" data-stats-drag-handle>
+                      <span>Live Stats</span>
+                      <div class="stats-head-actions">
+                        <button class="stats-reset hover-tip" data-hover-tip="Reset graph" data-stats-reset>${svg("rotate")}</button>
+                        <button class="stats-close" data-stats-close>${svg("x")}</button>
+                      </div>
+                    </div>
+                    <div class="stats-game-dropdown">
+                      <button class="stats-game-toggle" data-stats-game-toggle>${currentLabel}${svg("chevronDown")}</button>
+                      ${state.statsGameDropdownOpen ? `
+                      <div class="stats-game-menu">
+                        <button class="${state.statsGame === "all" ? "active" : ""}" data-stats-game="all">All</button>
+                        ${played.map((g) => `<button class="${state.statsGame === g ? "active" : ""}" data-stats-game="${g}">${GAME_NAMES[g] || g}</button>`).join("")}
+                      </div>` : ""}
+                    </div>
+                    <div class="stats-profit ${rangeProfit >= 0 ? "positive" : "negative"}">${rangeProfit >= 0 ? "+$" : "-$"}${Math.abs(rangeProfit).toFixed(2)}</div>
+                    <div class="stats-grid">
+                      <div><span>Wagered</span><strong>$${rangeWagered.toFixed(2)}</strong></div>
+                      <div><span>Wins</span><strong>${rangeWins}</strong></div>
+                      <div><span>Losses</span><strong>${rangeLosses}</strong></div>
+                    </div>
+                    <div class="stats-chart-box" data-stats-chart-box>${chart.html}</div>
+                  </div>`;
+                })() : ""}
+              </div>
+            </div>
+
+            ${state.infoOpen ? `
+            <div class="modal-overlay" data-info-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>${GAME_NAME}</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Pick a Roll Over or Roll Under line, then place a bet. A number between 0.00 and 100.00 is rolled — if it lands on your side of the line, you win.</p>
+                <p>Multiplier and Win Chance move together: the tighter your win chance, the higher the payout. A small house edge (${(HOUSE_EDGE * 100).toFixed(0)}%) is baked into the multiplier at every setting.</p>
+              </div>
+            </div>` : ""}
+
+            ${state.fairPlayOpen ? `
+            <div class="modal-overlay" data-fair-play-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>${svg("safe")} Fair Play</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Each roll draws a fresh number between 0.00 and 100.00 from your current seed. The outcome is decided the instant you place the bet — nothing about the animation changes the result.</p>
+                <div class="seed-row">
+                  <input type="text" value="${state.clientSeed}" data-client-seed>
+                  <button class="seed-randomize ${state.seedSpinning ? "spin" : ""}" data-randomize-seed>${svg("rotate")} Randomize</button>
+                </div>
+                <div class="seed-note">This is a demo — randomizing your seed reloads the game.</div>
+              </div>
+            </div>` : ""}
+          `;
+
+          bind();
+          if (state.statsOpen && window.__diceLastChart) Shell.bindChartHover("[data-stats-chart-box]", window.__diceLastChart);
+        }
+
+        // ---------------------------------------------------------------
+        // LIVE PATCH — updates the slider track fill, the big readout, and
+        // the stat-strip readouts (multiplier / roll-over-under / win chance)
+        // without touching the rest of the DOM. Used while dragging the
+        // slider or typing in a text box, so the browser's native drag and
+        // focus/caret state never gets interrupted. Deliberately never
+        // shows or moves the hex marker — that only happens after a bet
+        // is placed and resolved (see placeBet / runAutoStep), never just
+        // from adjusting odds.
+        // ---------------------------------------------------------------
+        function updateOddsDisplay(opts) {
+          const skipSel = opts && opts.skip;
+          const chance = winChanceFromThreshold(state.threshold, state.rollMode);
+          const mult = multiplierFromChance(chance);
+          const thresholdPct = state.threshold;
+
+          const loseWidth = state.rollMode === "over" ? thresholdPct : (100 - thresholdPct);
+          const winWidth = 100 - loseWidth;
+
+          const trackLose = document.querySelector(".dice-track-lose");
+          const trackWin = document.querySelector(".dice-track-win");
+          if (trackLose) trackLose.style.width = loseWidth + "%";
+          if (trackWin) trackWin.style.width = winWidth + "%";
+
+          // only reposition the idle (non-result) marker; if a real result is showing, leave it alone
+          if (!state.lastResult) {
+            const hexWrap = document.querySelector(".dice-hex-wrap");
+            if (hexWrap) {
+              hexWrap.style.left = valueToPosition(thresholdPct);
+              const hexNum = hexWrap.querySelector(".dice-hex-num");
+              if (hexNum) hexNum.textContent = thresholdPct.toFixed(2);
+            }
+          }
+
+          const readout = document.querySelector(".dice-big-readout");
+          if (readout) readout.textContent = thresholdPct.toFixed(2);
+
+          const sliderEl = document.querySelector("[data-dice-slider]");
+          if (sliderEl && document.activeElement !== sliderEl) sliderEl.value = Math.round(thresholdPct);
+
+          const multEl = document.querySelector("[data-mult-input]");
+          if (multEl && skipSel !== "[data-mult-input]") multEl.value = mult.toFixed(4);
+
+          const threshLabel = document.querySelector("[data-mode-toggle] label");
+          if (threshLabel) threshLabel.textContent = `Roll ${state.rollMode === "over" ? "Over" : "Under"}`;
+          const threshVal = document.querySelector("[data-mode-toggle] .stat-field-value");
+          if (threshVal) threshVal.textContent = state.threshold.toFixed(2);
+
+          const chanceEl = document.querySelector("[data-chance-input]");
+          if (chanceEl && skipSel !== "[data-chance-input]") chanceEl.value = chance.toFixed(2);
+
+          const payoutAmt = document.querySelector(".demo-payout-top.amt");
+          if (payoutAmt) {
+            const betAmt = currentBetAmount();
+            payoutAmt.textContent = Shell.fmtMoney(betAmt * mult);
+          }
+        }
+
+        // ---------------------------------------------------------------
+        // BIND
+        // ---------------------------------------------------------------
+        function refocus(sel) {
+          const el = document.querySelector(sel);
+          if (el) { el.focus(); const v = el.value; el.value = ""; el.value = v; }
+        }
+
+        function bind() {
+          document.querySelector("[data-place]")?.addEventListener("click", placeBet);
+          document.querySelector("[data-auto-toggle]")?.addEventListener("click", () => { if (state.auto.running) stopAuto(); else startAuto(); });
+
+          document.querySelector("[data-mode-manual]")?.addEventListener("click", () => { state.mode = "manual"; render(); });
+          document.querySelector("[data-mode-auto]")?.addEventListener("click", () => { state.mode = "auto"; render(); });
+
+          const betInput = document.querySelector("[data-bet-input]");
+          betInput?.addEventListener("input", (e) => {
+            state.betAmount = e.target.value.replace(/[^0-9.]/g, "");
+            render();
+            refocus("[data-bet-input]");
+          });
+          document.querySelector("[data-half]")?.addEventListener("click", () => {
+            const b = parseFloat(state.betAmount) || 0;
+            state.betAmount = (b / 2).toFixed(2);
+            render();
+          });
+          document.querySelector("[data-double-bet]")?.addEventListener("click", () => {
+            const b = parseFloat(state.betAmount) || 0;
+            state.betAmount = Math.min(b * 2 || 0, Shell.getBalance()).toFixed(2);
+            render();
+          });
+
+          // ---- auto-mode controls ----
+          document.querySelector("[data-num-bets]")?.addEventListener("input", (e) => { state.auto.numBets = e.target.value.replace(/[^0-9]/g, ""); render(); refocus("[data-num-bets]"); });
+          document.querySelector("[data-win-reset]")?.addEventListener("click", () => { state.auto.onWinPct = ""; render(); });
+          document.querySelector("[data-loss-reset]")?.addEventListener("click", () => { state.auto.onLossPct = ""; render(); });
+          document.querySelector("[data-win-pct]")?.addEventListener("input", (e) => { state.auto.onWinPct = sanitizeSignedDecimal(e.target.value); render(); refocus("[data-win-pct]"); });
+          document.querySelector("[data-loss-pct]")?.addEventListener("input", (e) => { state.auto.onLossPct = sanitizeSignedDecimal(e.target.value); render(); refocus("[data-loss-pct]"); });
+          document.querySelector("[data-stop-profit]")?.addEventListener("input", (e) => { state.auto.stopOnProfit = e.target.value.replace(/[^0-9.]/g, ""); render(); refocus("[data-stop-profit]"); });
+          document.querySelector("[data-stop-loss]")?.addEventListener("input", (e) => { state.auto.stopOnLoss = e.target.value.replace(/[^0-9.]/g, ""); render(); refocus("[data-stop-loss]"); });
+
+          // ---- dice odds controls — update live as the player types, not just on blur ----
+          // IMPORTANT: none of these call render() (full innerHTML rebuild) while the
+          // player is actively dragging the slider or typing in a text box. Rebuilding
+          // the DOM mid-interaction destroys the native drag/focus state (that's why the
+          // slider used to require release-and-regrab, and typing felt like it "wouldn't
+          // let you"). Instead we patch just the live-updating bits of the DOM directly.
+          // Note: the hex/dice marker never moves from these controls — it only appears
+          // and moves once an actual bet is placed and resolved (see placeBet/runAutoStep).
+          const slider = document.querySelector("[data-dice-slider]");
+          slider?.addEventListener("input", (e) => {
+            setThreshold(parseFloat(e.target.value));
+            updateOddsDisplay();
+          });
+
+          document.querySelector("[data-chance-input]")?.addEventListener("input", (e) => {
+            const v = parseFloat(e.target.value);
+            if (!isNaN(v)) setWinChance(v);
+            updateOddsDisplay({ skip: "[data-chance-input]" });
+          });
+          document.querySelector("[data-mult-input]")?.addEventListener("input", (e) => {
+            const v = parseFloat(e.target.value);
+            if (!isNaN(v)) setMultiplier(v);
+            updateOddsDisplay({ skip: "[data-mult-input]" });
+          });
+          document.querySelector("[data-mult-clear]")?.addEventListener("click", () => { setThreshold(50); render(); });
+          document.querySelector("[data-mode-toggle]")?.addEventListener("click", () => {
+            const chance = winChanceFromThreshold(state.threshold, state.rollMode);
+            state.rollMode = state.rollMode === "over" ? "under" : "over";
+            setWinChance(chance);
+            render();
+          });
+
+          document.querySelector("[data-info]")?.addEventListener("click", () => { state.infoOpen = true; render(); });
+          document.querySelector("[data-fair-play]")?.addEventListener("click", () => { state.fairPlayOpen = true; render(); });
+          document.querySelectorAll("[data-modal-close]").forEach((btn) => btn.onclick = () => { state.infoOpen = false; state.fairPlayOpen = false; render(); });
+          document.querySelector("[data-info-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.infoOpen = false; render(); } });
+          document.querySelector("[data-fair-play-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.fairPlayOpen = false; render(); } });
+          document.querySelector("[data-client-seed]")?.addEventListener("input", (e) => { state.clientSeed = e.target.value; });
+          document.querySelector("[data-randomize-seed]")?.addEventListener("click", () => {
+            location.reload();
+          });
+
+          document.querySelector("[data-settings-toggle]")?.addEventListener("click", () => { state.settingsOpen = !state.settingsOpen; render(); });
+          document.querySelector("[data-toggle-setting]")?.addEventListener("click", (e) => {
+            const key = e.currentTarget.dataset.toggleSetting;
+            state.settings[key] = !state.settings[key];
+            render();
+          });
+          document.querySelector("[data-volume-slider]")?.addEventListener("input", (e) => { state.settings.volume = parseInt(e.target.value, 10); });
+
+          document.querySelector("[data-fav-toggle]")?.addEventListener("click", () => {
+            Shell.toggleFavorite(GAME_ID);
+            state.favorite = Shell.getFavorites().includes(GAME_ID);
+            render();
+          });
+
+          document.querySelector("[data-stats-toggle]")?.addEventListener("click", () => { state.statsOpen = !state.statsOpen; render(); });
+          document.querySelector("[data-stats-close]")?.addEventListener("click", (e) => { e.stopPropagation(); state.statsOpen = false; render(); });
+          document.querySelector("[data-stats-reset]")?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            Shell.resetBetLog();
+            render();
+            Shell.notify("Live stats graph reset.");
+          });
+          document.querySelector("[data-stats-game-toggle]")?.addEventListener("click", (e) => { e.stopPropagation(); state.statsGameDropdownOpen = !state.statsGameDropdownOpen; render(); });
+          document.querySelectorAll("[data-stats-game]").forEach((btn) => btn.onclick = (e) => { e.stopPropagation(); state.statsGame = btn.dataset.statsGame; state.statsGameDropdownOpen = false; render(); });
+
+          const dragHandle = document.querySelector("[data-stats-drag-handle]");
+          if (dragHandle) dragHandle.addEventListener("mousedown", (e) => {
+            if (e.target.closest("[data-stats-close]")) return;
+            const panel = document.querySelector("[data-stats-popover]");
+            if (!panel) return;
+            const rect = panel.getBoundingClientRect();
+            state.statsDrag = { offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+            panel.classList.add("dragging");
+            e.preventDefault();
+          });
+
+        }
+
+        // Bound once, ever — not inside bind()/render() — so it can never
+        // pile up duplicate listeners across renders (which was the root
+        // cause of the settings popover, and the Animations toggle inside
+        // it, becoming unresponsive after a single use). `state` is read
+        // live via closure, so this still stays correct on every future render.
+        document.addEventListener("click", (e) => {
+          if (state.settingsOpen && !e.target.closest("[data-settings-popover]") && !e.target.closest("[data-settings-toggle]")) {
+            state.settingsOpen = false;
+            render();
+          }
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Neon Jackpot fictional arcade demo — Gifts" />
+    <title>Gifts · Neon Jackpot</title>
+    <link rel="stylesheet" href="./shell.css" />
+    <style>
+      .content { max-width: 900px; margin: auto; padding: 34px 32px 60px; }
+      .intro { margin-bottom: 24px; }
+      .eyebrow { display: flex; align-items: center; gap: 8px; color: #ff5c9f; font-family: var(--mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; }
+      .eyebrow i { width: 25px; height: 1px; background: #ff5c9f; }
+      h1 { max-width: 580px; margin: 10px 0 0; font-size: clamp(26px, 3.4vw, 38px); font-weight: 800; letter-spacing: -.05em; line-height: 1; }
+      h1 em { color: var(--mint); font-style: normal; }
+      .sub { max-width: 560px; margin: 10px 0 0; color: #8791a6; font-size: 12.5px; line-height: 1.55; }
+
+      .gift-tabs { display: flex; gap: 6px; padding: 4px; margin: 22px 0 20px; background: #0c0e18; border: 1px solid var(--line); border-radius: 12px; max-width: 340px; }
+      .gift-tab { flex: 1; padding: 10px 0; color: #7c88a0; background: transparent; border: 0; border-radius: 9px; font-size: 12px; font-weight: 800; }
+      .gift-tab.active { color: #04140f; background: #3aa0ff; box-shadow: 0 0 16px rgba(58,160,255,.4); }
+
+      .gift-panel { display: none; }
+      .gift-panel.active { display: block; }
+
+      .gift-card { padding: 22px; background: #121522; border: 1px solid var(--line); border-radius: 16px; }
+      .gift-field { margin-bottom: 16px; }
+      .gift-field label { display: block; margin-bottom: 7px; color: #b6bfd2; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+      .gift-field input, .gift-field textarea {
+        width: 100%; padding: 12px 13px; color: var(--text); background: #0c0e18;
+        border: 1px solid var(--line); border-radius: 10px; font: inherit; font-family: var(--mono); font-size: 13px; outline: 0;
+      }
+      .gift-field input:focus, .gift-field textarea:focus { border-color: #3aa0ff; }
+      .gift-field textarea { resize: vertical; min-height: 90px; }
+      .gift-field .hint { margin-top: 6px; color: #69758c; font-size: 10.5px; }
+      .gift-balance-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding: 11px 13px; background: rgba(255,255,255,.03); border: 1px solid var(--line); border-radius: 10px; font-size: 11.5px; color: #8791a6; }
+      .gift-balance-row strong { color: #5cffe7; font-family: var(--mono); }
+
+      .gift-btn { width: 100%; padding: 13px 0; color: #04140f; background: linear-gradient(120deg, #38d787, #63f0ab); border: 0; border-radius: 10px; font-size: 12.5px; font-weight: 800; }
+      .gift-btn:disabled { color: #6c7488; background: #1b2032; }
+
+      .gift-error { margin-top: 12px; padding: 11px 13px; color: #ff8fb0; background: rgba(255,92,159,.08); border: 1px solid rgba(255,92,159,.3); border-radius: 10px; font-size: 12px; }
+      .gift-success { margin-top: 16px; padding: 16px; background: rgba(92,255,231,.06); border: 1px solid rgba(92,255,231,.3); border-radius: 12px; }
+      .gift-success h4 { margin: 0 0 10px; font-size: 13px; color: #5cffe7; }
+      .gift-code-box { display: flex; gap: 8px; align-items: center; }
+      .gift-code-box textarea { flex: 1; }
+      .gift-copy-btn { flex: none; padding: 12px 16px; color: #04140f; background: var(--mint); border: 0; border-radius: 10px; font-size: 11.5px; font-weight: 800; white-space: nowrap; }
+      .gift-copy-btn.copied { background: #63f0ab; }
+      .gift-success .note { margin-top: 10px; color: #69758c; font-size: 10.5px; }
+
+      .gift-redeemed-box { margin-top: 16px; padding: 16px; background: rgba(92,255,231,.06); border: 1px solid rgba(92,255,231,.3); border-radius: 12px; text-align: center; }
+      .gift-redeemed-box .amt { font-size: 22px; font-weight: 800; color: #5cffe7; }
+      .gift-redeemed-box .from { margin-top: 4px; color: #69758c; font-size: 10.5px; font-family: var(--mono); }
+
+      .gift-history { margin-top: 10px; display: grid; gap: 8px; }
+      .gift-history-row { display: flex; align-items: center; gap: 11px; padding: 12px; background: #121522; border: 1px solid var(--line); border-radius: 12px; }
+      .gift-history-icon { display: grid; place-items: center; width: 32px; height: 32px; flex: none; color: #04140f; background: var(--mint); border-radius: 8px; }
+      .gift-history-icon svg { width: 15px; height: 15px; }
+      .gift-history-icon.received { color: #04140f; background: #63f0ab; }
+      .gift-history-body { flex: 1; min-width: 0; }
+      .gift-history-body strong { display: block; font-size: 12px; font-family: var(--mono); }
+      .gift-history-body span { color: #69758c; font-size: 10px; }
+      .gift-history-amt { font-family: var(--mono); font-weight: 800; color: #ff8fb0; font-size: 12.5px; flex: none; }
+      .gift-history-amt.received { color: #5cffe7; }
+      .gift-history-empty { padding: 30px 20px; color: #69758c; text-align: center; font-size: 12px; }
+
+      .gift-note-box { display: flex; gap: 10px; padding: 13px; margin-top: 16px; background: rgba(255,255,255,.02); border: 1px solid var(--line); border-radius: 10px; color: #8791a6; font-size: 11px; line-height: 1.5; }
+      .gift-note-box svg { flex: none; width: 15px; height: 15px; margin-top: 1px; color: #69758c; }
+
+      /* ---- saved contacts (recipient picker) ---- */
+      .gift-recipient-row { position: relative; display: flex; gap: 8px; }
+      .gift-recipient-row input { flex: 1; min-width: 0; }
+      .gift-contacts-toggle { flex: none; display: grid; place-items: center; width: 44px; color: #b6bfd2; background: #0c0e18; border: 1px solid var(--line); border-radius: 10px; }
+      .gift-contacts-toggle:hover, .gift-contacts-toggle.active { color: var(--mint); border-color: rgba(92,255,231,.35); }
+      .gift-contacts-toggle svg { width: 16px; height: 16px; }
+      .gift-contacts-panel {
+        position: absolute; top: 0; left: 100%; z-index: 20;
+        width: 260px; margin-left: 8px; padding: 10px;
+        background: #0c0e18; border: 1px solid var(--line); border-radius: 12px;
+        box-shadow: 0 12px 32px rgba(0,0,0,.4);
+      }
+      @media (max-width: 640px) {
+        .gift-contacts-panel { position: static; left: auto; top: auto; width: auto; margin-left: 0; margin-top: 10px; box-shadow: none; }
+      }
+      .gift-contacts-title { margin: 2px 4px 8px; color: #69758c; font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
+      .gift-contacts-empty { padding: 10px 6px; color: #69758c; font-size: 11.5px; }
+      .gift-contact-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+      .gift-contact-pick { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 9px 11px; color: #cdd4e2; background: #121522; border: 1px solid var(--line); border-radius: 9px; text-align: left; }
+      .gift-contact-pick:hover { border-color: rgba(92,255,231,.35); color: var(--mint); }
+      .gift-contact-name { font-size: 12px; font-weight: 700; }
+      .gift-contact-idtext { overflow: hidden; max-width: 100%; color: #69758c; font-family: var(--mono); font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
+      .gift-contact-rename, .gift-contact-remove { flex: none; display: grid; place-items: center; width: 30px; height: 30px; color: #8791a6; background: #121522; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+      .gift-contact-rename:hover { color: var(--mint); }
+      .gift-contact-remove:hover { color: #ff8fb0; border-color: rgba(255,92,159,.35); }
+      .gift-contact-add { display: flex; gap: 6px; margin-top: 6px; }
+      .gift-contact-add input { flex: 1; min-width: 0; padding: 9px 10px; color: var(--text); background: #121522; border: 1px solid var(--line); border-radius: 8px; font-family: var(--mono); font-size: 11.5px; }
+      .gift-contact-add button { flex: none; padding: 9px 12px; color: #04140f; background: var(--mint); border: 0; border-radius: 8px; font-size: 11px; font-weight: 800; }
+      .gift-save-contact-row { display: flex; gap: 8px; margin-top: 12px; }
+      .gift-save-contact-row input { flex: 1; min-width: 0; padding: 10px 11px; color: var(--text); background: #0c0e18; border: 1px solid var(--line); border-radius: 9px; font-size: 11.5px; }
+      .gift-save-contact-row button { flex: none; padding: 10px 13px; color: #04140f; background: var(--mint); border: 0; border-radius: 9px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+    </style>
+  </head>
+  <body>
+    <div class="site-shell">
+      <div class="site-grid">
+        <div id="site-sidebar"></div>
+        <div id="site-topbar"></div>
+        <div id="page-content"></div>
+      </div>
+    </div>
+    <script src="./promo-vault.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="./chat.js"></script>
+    <script src="./shell.js"></script>
+    <script src="./games.js"></script>
+    <script src="./gifts.js"></script>
+    <script>
+      (() => {
+        Shell.mount({ activeTab: "Gifts" });
+        Chat.mount();
+        const content = document.getElementById("page-content");
+        const svg = Shell.svg;
+        let tab = "send";
+        let lastCode = "";
+        let sendError = "";
+        let redeemError = "";
+        let redeemResult = null;
+        let contactsOpen = false;       // whether the saved-contacts picker panel is expanded
+        let lastRecipientId = "";       // recipient of the most recently generated code, for the post-send "save contact" prompt
+        let contactSaved = false;       // true once that recipient has been explicitly saved/renamed this session (hides the prompt)
+        let recipientValue = "";        // current text in the "Friend's Player ID" input, kept in state so it survives paint() re-renders
+
+        // Resolve a Player ID to its saved contact name for display, falling back to the
+        // raw ID if no contact (or no real rename yet) exists for it.
+        function displayNameFor(id) {
+          const contact = GiftManager.findContact(id);
+          return (contact && contact.name && contact.name !== id) ? contact.name : id;
+        }
+
+        // Redeemed ("claimed") gifts aren't tracked by GiftManager, so we keep a small
+        // local log here purely for display in the History tab — one entry per
+        // successful redemption, newest first.
+        const RECEIVED_LOG_KEY = "nj_gift_received_log";
+        function getReceivedHistory() {
+          try {
+            const raw = localStorage.getItem(RECEIVED_LOG_KEY);
+            const arr = raw ? JSON.parse(raw) : [];
+            return Array.isArray(arr) ? arr : [];
+          } catch { return []; }
+        }
+        function logReceivedGift(entry) {
+          try {
+            const arr = getReceivedHistory();
+            arr.unshift(entry);
+            localStorage.setItem(RECEIVED_LOG_KEY, JSON.stringify(arr.slice(0, 200)));
+          } catch { /* ignore storage errors */ }
+        }
+
+        function contactsPanelHTML() {
+          const contacts = GiftManager.getContacts();
+          return `<div class="gift-contacts-panel" data-contacts-panel>
+            <div class="gift-contacts-title">Saved Contacts</div>
+            ${contacts.length ? contacts.map((c) => `
+              <div class="gift-contact-row">
+                <button class="gift-contact-pick" data-contact-pick="${c.id}">
+                  <span class="gift-contact-name">${c.name}</span>
+                  <span class="gift-contact-idtext">${c.id}</span>
+                </button>
+                <button class="gift-contact-rename hover-tip" data-hover-tip="Rename" data-contact-rename="${c.id}" aria-label="Rename ${c.name}">${svg("edit")}</button>
+                <button class="gift-contact-remove hover-tip" data-hover-tip="Remove" data-contact-remove="${c.id}" aria-label="Remove ${c.name}">${svg("x")}</button>
+              </div>`).join("") : `<div class="gift-contacts-empty">No saved contacts yet — send a gift or add one below.</div>`}
+            <div class="gift-contact-add">
+              <input type="text" placeholder="Player ID" data-new-contact-id autocomplete="off" spellcheck="false">
+              <input type="text" placeholder="Name" data-new-contact-name autocomplete="off">
+              <button data-new-contact-save>Save</button>
+            </div>
+          </div>`;
+        }
+
+        function paint() {
+          const myId = Shell.getPlayerProfile().id;
+          const balance = Shell.getCashBalance();
+          const sentHistory = GiftManager.getSentHistory().map((h) => ({ ...h, kind: "sent" }));
+          const receivedHistory = getReceivedHistory().map((h) => ({ ...h, kind: "received" }));
+          const history = sentHistory.concat(receivedHistory).sort((a, b) => b.timestamp - a.timestamp);
+
+          content.innerHTML = `<div class="content">
+            <div class="intro">
+              <div class="eyebrow"><i></i> Gifts</div>
+              <h1>Send a <em>gift</em> to a friend.</h1>
+              <p class="sub">Generate a one-time code locked to your friend's Player ID. They paste it in on their end to claim it — no one else can redeem it, and it only works once.</p>
+            </div>
+
+            <div class="gift-tabs">
+              <button class="gift-tab ${tab === "send" ? "active" : ""}" data-gift-tab="send">Send</button>
+              <button class="gift-tab ${tab === "redeem" ? "active" : ""}" data-gift-tab="redeem">Redeem</button>
+              <button class="gift-tab ${tab === "history" ? "active" : ""}" data-gift-tab="history">History</button>
+            </div>
+
+            <div class="gift-panel ${tab === "send" ? "active" : ""}">
+              <div class="gift-card">
+                <div class="gift-balance-row"><span>Your balance</span><strong>${Shell.fmtMoney(balance)}</strong></div>
+                <div class="gift-field">
+                  <label for="gift-recipient">Friend's Player ID</label>
+                  <div class="gift-recipient-row">
+                    <input id="gift-recipient" type="text" placeholder="e.g. TTQ7BMWDSPLKPITLXWUHK4GC4Y" autocomplete="off" spellcheck="false" data-gift-recipient value="${recipientValue.replace(/"/g, "&quot;")}" />
+                    <button type="button" class="gift-contacts-toggle hover-tip ${contactsOpen ? "active" : ""}" data-hover-tip="Saved contacts" data-gift-contacts-toggle aria-label="Saved contacts">${svg("user")}</button>
+                    ${contactsOpen ? contactsPanelHTML() : ""}
+                  </div>
+                  <div class="hint">Ask your friend for the Player ID shown on their profile, or pick a saved contact.</div>
+                </div>
+                <div class="gift-field">
+                  <label for="gift-amount">Amount to send</label>
+                  <input id="gift-amount" type="number" min="0.01" step="0.01" placeholder="1000" data-gift-amount />
+                </div>
+                <button class="gift-btn" data-gift-send>${svg("gift")} Generate gift code</button>
+                ${sendError ? `<div class="gift-error">${sendError}</div>` : ""}
+                ${lastCode ? `
+                  <div class="gift-success">
+                    <h4>Gift code ready — send this to your friend</h4>
+                    <div class="gift-code-box">
+                      <textarea readonly data-gift-code-output>${lastCode}</textarea>
+                      <button class="gift-copy-btn" data-gift-copy>Copy</button>
+                    </div>
+                    <div class="note">This code only works for the Player ID you entered, and only once.</div>
+                    ${(lastRecipientId && !contactSaved) ? `
+                    <div class="gift-save-contact-row">
+                      <input type="text" placeholder="Name this contact so it's easy to find next time" data-save-contact-name>
+                      <button data-save-contact-confirm>Save contact</button>
+                    </div>` : ""}
+                  </div>` : ""}
+                <div class="gift-note-box">${svg("safe")}<div>Gifts are locked to your friend's Player ID and can only be redeemed once. Like everything in this offline demo, there's no server validating this — it's built to work correctly between friends acting in good faith, not to be tamper-proof against someone editing their own save file.</div></div>
+              </div>
+            </div>
+
+            <div class="gift-panel ${tab === "redeem" ? "active" : ""}">
+              <div class="gift-card">
+                <div class="gift-balance-row"><span>Your Player ID</span><strong style="color:#b6bfd2;">${myId}</strong></div>
+                <div class="gift-field">
+                  <label for="gift-redeem-input">Paste gift code</label>
+                  <textarea id="gift-redeem-input" placeholder="Paste the code your friend sent you" data-gift-redeem-input></textarea>
+                </div>
+                <button class="gift-btn" data-gift-redeem>${svg("gift")} Redeem gift</button>
+                ${redeemError ? `<div class="gift-error">${redeemError}</div>` : ""}
+                ${redeemResult ? `
+                  <div class="gift-redeemed-box">
+                    <div class="amt">+${Shell.fmtMoney(redeemResult.amount)}</div>
+                    <div class="from">from ${displayNameFor(redeemResult.senderId)}</div>
+                  </div>` : ""}
+              </div>
+            </div>
+
+            <div class="gift-panel ${tab === "history" ? "active" : ""}">
+              <div class="gift-history">
+                ${history.length ? history.map((h) => {
+                  const isReceived = h.kind === "received";
+                  const otherId = isReceived ? h.senderId : h.recipientId;
+                  const name = displayNameFor(otherId);
+                  return `
+                  <div class="gift-history-row">
+                    <div class="gift-history-icon ${isReceived ? "received" : ""}">${svg("gift")}</div>
+                    <div class="gift-history-body">
+                      <strong>${isReceived ? "Claimed from " : ""}${name}</strong>
+                      <span>${new Date(h.timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${new Date(h.timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span>
+                    </div>
+                    <div class="gift-history-amt ${isReceived ? "received" : ""}">${isReceived ? "+" : "-"}${Shell.fmtMoney(h.amount)}</div>
+                  </div>`;
+                }).join("") : `<div class="gift-history-empty">You haven't sent or claimed any gifts yet.</div>`}
+              </div>
+            </div>
+          </div>`;
+
+          content.querySelectorAll("[data-gift-tab]").forEach((b) => b.onclick = () => {
+            tab = b.dataset.giftTab;
+            sendError = ""; redeemError = ""; redeemResult = null;
+            contactsOpen = false;
+            paint();
+          });
+
+          content.querySelector("[data-gift-recipient]").addEventListener("input", (e) => {
+            recipientValue = e.target.value;
+          });
+
+          content.querySelector("[data-gift-send]").onclick = async () => {
+            sendError = "";
+            const recipientId = content.querySelector("[data-gift-recipient]").value;
+            const amount = content.querySelector("[data-gift-amount]").value;
+            try {
+              const { code } = await GiftManager.createGift({ recipientId, amount });
+              lastCode = code;
+              lastRecipientId = (recipientId || "").trim().toUpperCase();
+              // createGift already auto-saves the id as a contact under its own id as a
+              // placeholder name if it wasn't saved before — if it's still just that
+              // placeholder (no real name given yet), still offer the naming prompt.
+              const existing = GiftManager.findContact(lastRecipientId);
+              contactSaved = !!(existing && existing.name && existing.name !== lastRecipientId);
+              Shell.playChipSound("select");
+              Shell.notify("Gift code generated.");
+            } catch (err) {
+              sendError = (err && err.message) ? err.message : "Something went wrong generating that gift.";
+              lastCode = "";
+            }
+            paint();
+          };
+
+          content.querySelector("[data-gift-contacts-toggle]")?.addEventListener("click", () => {
+            contactsOpen = !contactsOpen;
+            paint();
+          });
+          content.querySelectorAll("[data-contact-pick]").forEach((btn) => btn.onclick = () => {
+            recipientValue = btn.dataset.contactPick;
+            contactsOpen = false;
+            paint();
+          });
+          content.querySelectorAll("[data-contact-rename]").forEach((btn) => btn.onclick = (e) => {
+            e.stopPropagation();
+            const id = btn.dataset.contactRename;
+            const current = GiftManager.findContact(id);
+            const name = window.prompt("Rename this contact:", current ? current.name : "");
+            if (name != null && name.trim()) {
+              GiftManager.saveContact(id, name);
+              if (id === lastRecipientId) contactSaved = true;
+              paint();
+            }
+          });
+          content.querySelectorAll("[data-contact-remove]").forEach((btn) => btn.onclick = (e) => {
+            e.stopPropagation();
+            GiftManager.removeContact(btn.dataset.contactRemove);
+            paint();
+          });
+          const newContactSaveBtn = content.querySelector("[data-new-contact-save]");
+          if (newContactSaveBtn) newContactSaveBtn.onclick = () => {
+            const idInput = content.querySelector("[data-new-contact-id]");
+            const nameInput = content.querySelector("[data-new-contact-name]");
+            if (!idInput.value.trim()) { idInput.focus(); return; }
+            GiftManager.saveContact(idInput.value, nameInput.value);
+            Shell.notify("Contact saved.");
+            paint();
+          };
+          const saveContactBtn = content.querySelector("[data-save-contact-confirm]");
+          if (saveContactBtn) saveContactBtn.onclick = () => {
+            const nameInput = content.querySelector("[data-save-contact-name]");
+            GiftManager.saveContact(lastRecipientId, nameInput.value);
+            contactSaved = true;
+            Shell.notify("Contact saved.");
+            paint();
+          };
+
+          const copyBtn = content.querySelector("[data-gift-copy]");
+          if (copyBtn) copyBtn.onclick = async () => {
+            const text = content.querySelector("[data-gift-code-output]").value;
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch {
+              // Fallback for browsers/contexts without Clipboard API access —
+              // select the text so the player can copy manually.
+              const ta = content.querySelector("[data-gift-code-output]");
+              ta.focus(); ta.select();
+            }
+            copyBtn.textContent = "Copied!";
+            copyBtn.classList.add("copied");
+            setTimeout(() => { copyBtn.textContent = "Copy"; copyBtn.classList.remove("copied"); }, 1400);
+          };
+
+          content.querySelector("[data-gift-redeem]").onclick = async () => {
+            redeemError = ""; redeemResult = null;
+            const code = content.querySelector("[data-gift-redeem-input]").value;
+            try {
+              const result = await GiftManager.redeemGift(code);
+              redeemResult = result;
+              logReceivedGift({ senderId: result.senderId, amount: result.amount, timestamp: Date.now() });
+              Shell.playWinDing();
+              Shell.notify(`Redeemed ${Shell.fmtMoney(result.amount)} from a gift.`);
+              Shell.addNotification({ type: "gift", title: "Gift redeemed", detail: `+${Shell.fmtMoney(result.amount)} added to your balance.` });
+            } catch (err) {
+              redeemError = (err && err.message) ? err.message : "Something went wrong redeeming that code.";
+            }
+            paint();
+          };
+        }
+
+        paint();
+      })();
+    </script>
+  </body>
+</html>

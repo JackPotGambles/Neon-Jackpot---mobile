@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Neon Jackpot fictional arcade demo — War" />
+    <title>War · Neon Jackpot</title>
+    <link rel="stylesheet" href="./shell.css" />
+    <link rel="stylesheet" href="./game-frame.css" />
+    <style>
+      /* ===== War uses the same full-width table layout as Blackjack (no left sidebar) ===== */
+      .shell-grid.table-layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto auto; }
+      .table-layout .title-bar { grid-column: 1; grid-row: 1; }
+      .table-layout .game-box { grid-column: 1; grid-row: 2; }
+      .table-layout .controls-panel { grid-column: 1; grid-row: 3; }
+      .table-layout .bottom-bar { grid-column: 1; grid-row: 4; }
+
+      /* ---------- table / stage — FIXED size, never grows with content ---------- */
+      .war-box { position: relative; align-items: center; justify-content: flex-start; gap: 0; padding: 26px 26px 0; height: 460px; overflow: hidden; }
+
+      .war-oval { position: relative; z-index: 1; width: 100%; max-width: 990px; height: 100%; margin: 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 14px; padding: 34px 20px; border: 1px solid rgba(150,166,207,.28); border-radius: 50% / 40%; }
+
+      .war-deck { position: absolute; right: 40px; top: 50%; transform: translateY(-50%); z-index: 0; }
+      .war-deck .card-slot { width: 76px; height: 104px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+
+      .war-lanes { display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 14px; flex: 1; }
+      .war-lane { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+      .war-lane-label { color: #6d7891; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+      .war-lane-cards { display: flex; gap: 8px; align-items: center; min-height: 104px; }
+      .war-lane-outcome { padding: 3px 10px; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; min-height: 18px; }
+      .war-lane-outcome.win { color: #04140f; background: var(--mint); }
+      .war-lane-outcome.lose { color: #fff; background: var(--red); }
+      .war-lane-outcome.push { color: #04140f; background: #b6bfd2; }
+
+      .war-mid-stack { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+
+      .war-pay-banner { display: flex; flex-direction: column; align-items: center; gap: 2px; opacity: .55; }
+      .war-ribbon { padding: 7px 22px; color: #9aa6c2; background: linear-gradient(180deg, rgba(58,66,102,.7), rgba(40,46,72,.55)); clip-path: polygon(4% 0, 96% 0, 100% 50%, 96% 100%, 4% 100%, 0 50%); font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-align: center; }
+
+      .war-status-banner { padding: 8px 20px; color: #eef3f8; background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 999px; font-size: 12px; font-weight: 700; text-align: center; }
+
+      /* war-decision — Surrender / Go To War prompt after a tie */
+      .war-decision-row { display: flex; gap: 10px; }
+      .war-decision-btn { padding: 10px 22px; border-radius: 10px; font-size: 12px; font-weight: 800; border: 1px solid var(--line); }
+      .war-decision-btn.surrender { color: #d5dbe8; background: #171b2c; }
+      .war-decision-btn.go-to-war { color: #04140f; background: var(--mint); border-color: transparent; box-shadow: 0 0 18px rgba(92,255,231,.3); }
+
+      @keyframes win-pop { 0% { transform: scale(1); } 35% { transform: scale(1.16); } 65% { transform: scale(.95); } 100% { transform: scale(1); } }
+      .win-pulse { animation: win-pop .55s cubic-bezier(.34,1.56,.64,1); }
+
+      /* ---------- playing cards ---------- */
+      .card-slot { width: 76px; height: 104px; perspective: 700px; }
+      .card-slot.dealt-anim { opacity: 0; animation: deal-in .4s cubic-bezier(.22,.9,.3,1) forwards; }
+      .card-slot.no-anim { opacity: 1; }
+      @keyframes deal-in { from { opacity: 0; transform: translate(160px, -60px) rotate(8deg) scale(.7); } to { opacity: 1; transform: none; } }
+      .card { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; }
+      .card.flipped { transform: rotateY(180deg); }
+      .card-front, .card-back { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 9px; backface-visibility: hidden; box-shadow: 0 8px 18px rgba(0,0,0,.35); }
+      .card-front { background: #f4f6fb; color: #171a26; transform: rotateY(180deg); }
+      .card-front.red { color: #e8384f; }
+      .card-front .rank { font-size: 26px; font-weight: 800; line-height: 1; }
+      .card-front .suit { font-size: 18px; line-height: 1; }
+      .card-back { background: linear-gradient(160deg, #2166c9, #123a72); border: 2px solid rgba(255,255,255,.5); }
+      .card-back .script { color: rgba(255,255,255,.85); font-size: 12px; font-weight: 700; font-style: italic; letter-spacing: -.02em; }
+      .card-back::after { content: ""; position: absolute; inset: 7px; border: 1px solid rgba(255,255,255,.25); border-radius: 6px; }
+
+      /* ---------- controls panel — fixed layout, nothing shifts it ---------- */
+      .controls-panel { position: relative; display: flex; flex-direction: column; justify-content: flex-start; padding: 22px 22px 20px; background: rgba(9,10,18,.4); border-top: 1px solid var(--line); min-height: 168px; }
+
+      /* CTA button docked on the seam between the table and the controls panel */
+      .war-dock-wrap { position: absolute; left: 50%; top: 0; transform: translate(-50%, -50%); width: min(260px, calc(100% - 60px)); z-index: 6; }
+      .war-dock-wrap .place-bet-btn { margin-top: 0; padding: 9px 0; font-size: 11.5px; border-radius: 10px; }
+      .war-dock-wrap.dock-hidden { opacity: 0; pointer-events: none; }
+      .war-dock-wrap.decision-dock { transform: translate(-50%, -50%); width: auto; }
+
+      .war-action-row { display: grid; grid-template-columns: 130px 1fr 130px; align-items: start; gap: 14px; }
+      .side-bet-slot { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; }
+      .side-bet-slot .side-bet-label { color: #6d7891; font-size: 10.5px; font-weight: 700; text-align: center; }
+      .side-bet-circle-wrap { position: relative; display: flex; justify-content: center; }
+      .side-bet-circle { position: relative; display: grid; place-items: center; width: 60px; height: 60px; color: #4c566c; background: transparent; border: 1.5px dashed rgba(150,166,207,.35); border-radius: 50%; font-size: 20px; font-weight: 300; font-family: var(--mono); }
+      .side-bet-circle:hover { color: var(--mint); border-color: rgba(92,255,231,.4); }
+      .side-bet-circle.has-amount { color: #04140f; background: var(--mint); border-style: solid; border-color: transparent; font-size: 13px; font-weight: 800; }
+      .side-bet-clear { position: absolute; top: -4px; right: -4px; display: grid; place-items: center; width: 16px; height: 16px; color: #8791a6; background: #1a1e30; border: 1px solid var(--line); border-radius: 50%; font-size: 8px; line-height: 1; }
+      .side-bet-clear svg { width: 9px; height: 9px; }
+      .side-bet-clear:hover { color: #fff; }
+      .side-bet-circle.side-bet-won { box-shadow: 0 0 0 2px var(--mint), 0 0 16px rgba(92,255,231,.4); }
+      .side-bet-circle.side-bet-lost { box-shadow: 0 0 0 2px var(--red); opacity: .75; }
+      .side-bet-result { position: absolute; left: 50%; top: calc(100% + 4px); transform: translateX(-50%); padding: 2px 8px; border-radius: 999px; font-size: 9.5px; font-weight: 800; white-space: nowrap; }
+      .side-bet-result.win { color: #04140f; background: var(--mint); }
+      .side-bet-result.lose { color: #fff; background: var(--red); }
+      .side-bet-payout-note { color: #4c566c; font-size: 9px; font-weight: 700; }
+
+      /* centered "WIN PAYS 1 TO 1" pill spanning between the two side-bet slots, matching the mock */
+      .war-center-note { display: flex; align-items: center; justify-content: center; }
+      .war-center-pill { padding: 8px 18px; color: #7c88a0; background: rgba(255,255,255,.03); border: 1px solid var(--line); border-radius: 999px; font-size: 10.5px; font-weight: 800; letter-spacing: .04em; }
+
+      .chip-row { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 4px 0 0; }
+      .chips { display: flex; gap: 8px; }
+      .chip { display: grid; place-items: center; width: 42px; height: 42px; color: #fff; border-radius: 50%; border: 3px dashed rgba(255,255,255,.35); font-family: var(--mono); font-size: 11px; font-weight: 800; box-shadow: 0 6px 14px rgba(0,0,0,.35); }
+      .chip[data-chip="1"] { background: #cfd3da; color: #1a1d26; }
+      .chip[data-chip="5"] { background: #d1424f; }
+      .chip[data-chip="10"] { background: #2f6fd6; }
+      .chip[data-chip="25"] { background: #2f9e5c; }
+      .chip[data-chip="100"] { background: #2c2f38; }
+      .chip[data-chip="500"] { background: #7c3fd6; }
+      .chip.selected { border-color: #fff; transform: translateY(-3px); }
+      .chip:disabled { opacity: .4; cursor: not-allowed; }
+
+      /* compact, centered bet input (not full-width) */
+      .war-bet-input { position: relative; flex: none; width: 250px; }
+      .war-bet-input input { width: 100%; padding: 12px 86px 12px 24px; color: var(--text); background: #0c0e18; border: 1px solid var(--line); border-radius: 11px; font-size: 13px; }
+      .war-bet-input .prefix { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #55617a; font-size: 13px; pointer-events: none; }
+      .war-bet-input .bet-quick { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: flex; gap: 5px; }
+      .war-bet-input .bet-quick button { padding: 6px 8px; color: #b6bfd2; background: #1b2032; border: 1px solid var(--line); border-radius: 7px; font-size: 9.5px; font-weight: 700; }
+      .war-bet-input .bet-quick button:hover { color: #04140f; background: var(--mint); border-color: transparent; }
+      .war-bet-input .chip-pill { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 5px; padding: 4px 5px 4px 10px; background: #1b2032; border: 1px solid var(--line); border-radius: 999px; }
+      .war-bet-input .chip-pill .chip-pill-amt { color: var(--mint); font-family: var(--mono); font-size: 11px; font-weight: 800; }
+      .war-bet-input .chip-pill button { display: grid; place-items: center; width: 21px; height: 21px; border-radius: 50%; font-size: 11px; font-weight: 800; border: 0; }
+      .war-bet-input .chip-pill .chip-add-btn { color: #04140f; background: var(--mint); }
+      .war-bet-input .chip-pill .chip-clear-btn { color: #b6bfd2; background: #262c42; }
+      .balance-error { position: absolute; left: 0; top: 100%; margin-top: 6px; width: 100%; text-align: center; color: var(--red); font-size: 10.5px; font-weight: 700; }
+
+      @media (max-width: 900px) {
+        .war-action-row { grid-template-columns: 1fr; }
+        .side-bet-slot { flex-direction: row; }
+        .side-bet-slot:last-child { justify-self: center; }
+        .war-oval { border-radius: 24px; }
+        .war-deck { display: none; }
+        .war-dock-wrap { width: calc(100% - 32px); }
+        .war-lanes { gap: 28px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="site-shell">
+      <div class="site-grid">
+        <div id="site-sidebar"></div>
+        <div id="site-topbar"></div>
+        <div id="page-content"></div>
+      </div>
+    </div>
+    <script src="./promo-vault.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="./chat.js"></script>
+    <script src="./shell.js"></script>
+    <script src="./games.js"></script>
+    <script>
+      (() => {
+        Shell.mount({ activeTab: "Games" });
+        Chat.mount();
+        document.addEventListener("nj:animations", (e) => { state.settings.animations = !e.detail; render(); });
+        const content = document.getElementById("page-content");
+        const svg = Shell.svg;
+
+        const GAME_ID = "war";
+        const GAME_NAME = "War";
+        const CHIPS = [1, 5, 10, 25, 100, 500];
+
+        // ---------- Rainbet War payout config ----------
+        // Tie bet: true odds ~12.5:1, paid at 10:1 (house edge on this side bet, per design).
+        // Coloured Tie (tie AND both cards share the same color, e.g. both red): rarer than a
+        // plain tie, paid at a bigger multiplier to reflect the tighter odds.
+        const TIE_PAYOUT = 10;
+        const COLOURED_TIE_PAYOUT = 24;
+        // Bonus multiplier applied to the WAR wager only if the war itself ties again.
+        const WAR_TIE_BONUS = 2;
+
+        const state = {
+          betAmount: "",
+          selectedChip: null,
+          statsGame: "all",
+          statsGameDropdownOpen: false,
+          statsDrag: null,
+          statsOpen: false,
+          statsPos: null,
+          favorite: Shell.getFavorites().includes(GAME_ID),
+          settings: { animations: !Shell.isAnimationsDisabled(), volume: 100 },
+          settingsOpen: false,
+          infoOpen: false,
+          fairPlayOpen: false,
+          clientSeed: "9f2a-71cd-33be-a04e",
+          sideBets: { tie: 0, colouredTie: 0 },
+
+          shoe: [],
+          seenCardIds: new Set(),
+          round: {
+            active: false,
+            resolved: false,
+            phase: "idle",        // idle -> dealt -> decision (tie) -> war -> resolved
+            bet: 0,
+            playerCard: null,
+            dealerCard: null,
+            warPlayerCard: null,
+            warDealerCard: null,
+            burned: [],
+            outcome: null,        // "win" | "lose" | "push" | "surrender"
+            sideBetWagers: null,
+            sideBetOutcomes: null,
+          },
+        };
+
+        // ---------- deck / shoe — 8 decks, Aces high ----------
+        const SUITS = [{ s: "♠", red: false }, { s: "♣", red: false }, { s: "♥", red: true }, { s: "♦", red: true }];
+        const RANKS = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"]; // ascending; Ace is highest in War
+        let cardSeq = 1;
+        function freshShoe(numDecks = 8) {
+          const shoe = [];
+          for (let d = 0; d < numDecks; d++) for (const suit of SUITS) for (const rank of RANKS) shoe.push({ rank, suit: suit.s, red: suit.red });
+          for (let i = shoe.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [shoe[i], shoe[j]] = [shoe[j], shoe[i]]; }
+          return shoe;
+        }
+        function drawCard() {
+          if (state.shoe.length < 20) state.shoe = freshShoe();
+          const card = state.shoe.pop();
+          card.id = cardSeq++;
+          return card;
+        }
+        function rankValue(card) { return RANKS.indexOf(card.rank); }
+
+        // ---------- sound (card snap only — no click/hit/win jingles, matches Blackjack) ----------
+        let audioCtx = null;
+        const getCtx = () => { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); return audioCtx; };
+        const vol = () => state.settings.volume / 100;
+        function playCardSound() {
+          if (vol() <= 0) return;
+          const ctx = getCtx(); const now = ctx.currentTime;
+          const dur = 0.09;
+          const bufferSize = Math.floor(ctx.sampleRate * dur);
+          const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) {
+            const decay = 1 - i / bufferSize;
+            data[i] = (Math.random() * 2 - 1) * decay * decay;
+          }
+          const noise = ctx.createBufferSource(); noise.buffer = buffer;
+          const bandpass = ctx.createBiquadFilter();
+          bandpass.type = "bandpass"; bandpass.frequency.setValueAtTime(2200, now); bandpass.Q.value = 0.7;
+          const gain = ctx.createGain();
+          gain.gain.setValueAtTime(0.28 * vol(), now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+          noise.connect(bandpass).connect(gain).connect(ctx.destination);
+          noise.start(now); noise.stop(now + dur);
+        }
+
+        // ---------- card rendering (only animate cards not seen before) ----------
+        function cardBackHTML() {
+          return `<div class="card-slot"><div class="card"><div class="card-back"><span class="script">neon</span></div></div></div>`;
+        }
+        const newCardIdsThisRender = new Set();
+        function cardHTML(card, delayIndex) {
+          const isNew = state.settings.animations && !state.seenCardIds.has(card.id);
+          if (isNew) newCardIdsThisRender.add(card.id);
+          const animClass = isNew ? "dealt-anim" : "no-anim";
+          const style = isNew ? `animation-delay:${delayIndex * 140}ms;` : "";
+          return `<div class="card-slot ${animClass}" style="${style}">
+            <div class="card flipped">
+              <div class="card-back"><span class="script">neon</span></div>
+              <div class="card-front ${card.red ? "red" : ""}"><span class="rank">${card.rank}</span><span class="suit">${card.suit}</span></div>
+            </div>
+          </div>`;
+        }
+
+        // ---------- persistence — a round is "in progress" from the first deal until it's
+        // fully resolved (including the tie-decision and war steps), so it must survive an
+        // accidental navigation away exactly like Blackjack's hand does. ----------
+        function persistRound() {
+          const r = state.round;
+          if (!r.active || r.resolved) { Shell.clearActiveRound(GAME_ID); return; }
+          Shell.saveActiveRound(GAME_ID, { round: r, shoe: state.shoe, cardSeq, sideBets: state.sideBets });
+        }
+
+        // ---------- side bets: Tie & Coloured Tie, resolved off the very first deal ----------
+        function resolveSideBets() {
+          const r = state.round;
+          if (!r.sideBetWagers) return;
+          const isTie = r.playerCard.rank === r.dealerCard.rank;
+          const isColouredTie = isTie && r.playerCard.red === r.dealerCard.red;
+
+          if (r.sideBetWagers.tie > 0) {
+            r.sideBetOutcomes.tie = isTie ? { multiplier: TIE_PAYOUT } : { multiplier: 0 };
+          }
+          if (r.sideBetWagers.colouredTie > 0) {
+            r.sideBetOutcomes.colouredTie = isColouredTie ? { multiplier: COLOURED_TIE_PAYOUT } : { multiplier: 0 };
+          }
+        }
+        function payoutSideBets() {
+          const r = state.round;
+          if (!r.sideBetWagers) return;
+          ["tie", "colouredTie"].forEach((key) => {
+            const wager = r.sideBetWagers[key] || 0;
+            if (wager <= 0) return;
+            const outcome = r.sideBetOutcomes[key];
+            const won = outcome && outcome.multiplier > 0;
+            const profit = won ? wager * outcome.multiplier : -wager;
+            if (won) Shell.addBalance(wager + profit);
+            Shell.addBetEntry({ profit, bet: wager, won, game: GAME_ID });
+          });
+          // side bet amounts are "standing" — they carry over into the next round automatically,
+          // matching Blackjack's Perfect Pair / 21+3 convention.
+        }
+
+        // ---------- round flow ----------
+        function startRound() {
+          const r = state.round;
+          if (r.active && !r.resolved) return;
+          const betRaw = parseFloat(state.betAmount);
+          const bet = state.betAmount !== "" && !isNaN(betRaw) && betRaw > 0 ? betRaw : 0;
+          const tieBet = state.sideBets.tie || 0;
+          const colouredTieBet = state.sideBets.colouredTie || 0;
+          const totalUpfront = bet + tieBet + colouredTieBet;
+          const balance = Shell.getBalance();
+          if (bet > 0 && totalUpfront > balance) { Shell.notify("Insufficient balance."); return; }
+          if (bet > 0 && Shell.isBelowMinBet(bet)) { Shell.notify(`Minimum bet is ${Shell.fmtMoney(Shell.MIN_BET)}.`); return; }
+          if (totalUpfront > 0) Shell.addBalance(-totalUpfront);
+
+          r.active = true; r.resolved = false; r.phase = "dealt";
+          r.bet = bet;
+          r.playerCard = drawCard();
+          r.dealerCard = drawCard();
+          r.warPlayerCard = null; r.warDealerCard = null; r.burned = [];
+          r.outcome = null;
+          r.sideBetWagers = { tie: tieBet, colouredTie: colouredTieBet };
+          r.sideBetOutcomes = { tie: null, colouredTie: null };
+          playCardSound();
+          resolveSideBets();
+          persistRound();
+          render();
+
+          const isTie = r.playerCard.rank === r.dealerCard.rank;
+          if (!isTie) {
+            setTimeout(() => resolveStandardOutcome(), 650);
+          } else {
+            setTimeout(() => { r.phase = "decision"; persistRound(); render(); }, 650);
+          }
+        }
+
+        function resolveStandardOutcome() {
+          const r = state.round;
+          const playerHigh = rankValue(r.playerCard) > rankValue(r.dealerCard);
+          r.outcome = playerHigh ? "win" : "lose";
+          const profit = playerHigh ? r.bet : -r.bet;
+          if (playerHigh) Shell.addBalance(r.bet + profit);
+          finalizeRound(profit);
+        }
+
+        function surrender() {
+          const r = state.round;
+          if (r.phase !== "decision") return;
+          r.outcome = "surrender";
+          const refund = r.bet / 2;
+          const profit = -refund; // lose half the original bet
+          Shell.addBalance(refund);
+          finalizeRound(profit);
+        }
+
+        function goToWar() {
+          const r = state.round;
+          if (r.phase !== "decision") return;
+          const balance = Shell.getBalance();
+          if (r.bet > balance) { Shell.notify("Insufficient balance to go to war."); return; }
+          Shell.addBalance(-r.bet); // raise: match the original bet
+          r.phase = "war";
+          // burn three cards, then deal one final face-up card to both sides
+          r.burned = [drawCard(), drawCard(), drawCard()];
+          persistRound();
+          render();
+          playCardSound();
+
+          setTimeout(() => {
+            r.warPlayerCard = drawCard();
+            r.warDealerCard = drawCard();
+            playCardSound();
+            persistRound();
+            render();
+            setTimeout(() => resolveWar(), 650);
+          }, 550);
+        }
+
+        function resolveWar() {
+          const r = state.round;
+          const totalRisked = r.bet * 2; // original + raised war wager
+          if (r.warPlayerCard.rank === r.warDealerCard.rank) {
+            // war ties again — Rainbet bonus payout on the full risked amount
+            r.outcome = "war-tie-bonus";
+            const profit = totalRisked * (WAR_TIE_BONUS - 1);
+            Shell.addBalance(totalRisked + profit);
+            finalizeRound(profit);
+            return;
+          }
+          const playerHigh = rankValue(r.warPlayerCard) > rankValue(r.warDealerCard);
+          if (playerHigh) {
+            // original bet returned as a push, 1:1 profit on the raised portion only
+            r.outcome = "win";
+            const profit = r.bet;
+            Shell.addBalance(r.bet /* original returned */ + r.bet /* raised returned */ + profit);
+            finalizeRound(profit);
+          } else {
+            r.outcome = "lose";
+            finalizeRound(-totalRisked);
+          }
+        }
+
+        function cardsDetailFor(cards) {
+          return (cards || []).filter(Boolean).map((c) => ({ label: `${c.rank}${c.suit}`, red: c.red }));
+        }
+
+        function finalizeRound(profit) {
+          const r = state.round;
+          const won = profit > 0;
+          const playerCards = r.phase === "war" || r.warPlayerCard ? [r.playerCard, r.warPlayerCard] : [r.playerCard];
+          const dealerCards = r.phase === "war" || r.warDealerCard ? [r.dealerCard, r.warDealerCard] : [r.dealerCard];
+          const totalRisked = r.warPlayerCard ? r.bet * 2 : r.bet;
+          Shell.addBetEntry({
+            profit, bet: totalRisked, won, game: GAME_ID,
+            detail: {
+              type: "cards",
+              hands: [
+                { label: "You", cards: cardsDetailFor(playerCards) },
+                { label: "Dealer", cards: cardsDetailFor(dealerCards) },
+              ],
+            },
+          });
+          r.resolved = true;
+          r.phase = "resolved";
+          payoutSideBets();
+          Shell.clearActiveRound(GAME_ID);
+          render();
+        }
+
+        // ---------- refocus helper for the bet input ----------
+        function refocus(selector) {
+          requestAnimationFrame(() => {
+            const el = document.querySelector(selector);
+            if (el) { el.focus(); const v = el.value; el.setSelectionRange(v.length, v.length); }
+          });
+        }
+
+        // ---------- render ----------
+        function render() {
+          newCardIdsThisRender.clear();
+          const r = state.round;
+          const roundLocked = r.active && !r.resolved;
+          const betRaw = parseFloat(state.betAmount);
+          const hasBet = state.betAmount !== "" && !isNaN(betRaw) && betRaw > 0;
+          const balance = Shell.getBalance();
+          const insufficientBalance = hasBet && betRaw > balance;
+          const belowMinBet = hasBet && Shell.isBelowMinBet(betRaw);
+          const canPlaceBet = !insufficientBalance && !belowMinBet && !roundLocked;
+          const inDecision = r.phase === "decision";
+
+          const tieResult = (r.resolved && r.sideBetWagers && r.sideBetWagers.tie > 0 && r.sideBetOutcomes)
+            ? { won: r.sideBetOutcomes.tie.multiplier > 0, profit: r.sideBetWagers.tie * r.sideBetOutcomes.tie.multiplier }
+            : null;
+          const colouredTieResult = (r.resolved && r.sideBetWagers && r.sideBetWagers.colouredTie > 0 && r.sideBetOutcomes)
+            ? { won: r.sideBetOutcomes.colouredTie.multiplier > 0, profit: r.sideBetWagers.colouredTie * r.sideBetOutcomes.colouredTie.multiplier }
+            : null;
+
+          let cardCounter = 0;
+          const playerCardsHtml = r.playerCard
+            ? cardHTML(r.playerCard, cardCounter++) + (r.warPlayerCard ? cardHTML(r.warPlayerCard, cardCounter++) : (r.phase === "war" ? cardBackHTML() : ""))
+            : "";
+          const dealerCardsHtml = r.dealerCard
+            ? cardHTML(r.dealerCard, cardCounter++) + (r.warDealerCard ? cardHTML(r.warDealerCard, cardCounter++) : (r.phase === "war" ? cardBackHTML() : ""))
+            : "";
+
+          const playerWonLane = r.resolved && (r.outcome === "win" || r.outcome === "war-tie-bonus");
+          const dealerWonLane = r.resolved && r.outcome === "lose";
+          const pushLane = r.resolved && r.outcome === "surrender";
+          const playerPulse = playerWonLane ? "win-pulse" : "";
+          const dealerPulse = dealerWonLane ? "win-pulse" : "";
+
+          function outcomeLabel(forPlayer) {
+            if (!r.resolved) return "";
+            if (r.outcome === "surrender") return forPlayer ? "Surrendered" : "";
+            if (r.outcome === "war-tie-bonus") return forPlayer ? "War Tie Bonus!" : "";
+            if (r.outcome === "win") return forPlayer ? "Win" : "Lose";
+            if (r.outcome === "lose") return forPlayer ? "Lose" : "Win";
+            return "";
+          }
+
+          let statusText = "";
+          if (!r.active) statusText = "";
+          else if (r.phase === "dealt") statusText = "Dealing…";
+          else if (r.phase === "decision") statusText = "It's a tie! Surrender or go to war.";
+          else if (r.phase === "war") statusText = r.warPlayerCard ? "Resolving the war…" : "Burning three cards…";
+          else if (r.resolved) {
+            if (r.outcome === "surrender") statusText = `Surrendered — lost ${Shell.fmtMoney(r.bet / 2)}`;
+            else if (r.outcome === "war-tie-bonus") statusText = "War tied again — bonus payout!";
+            else if (r.outcome === "win") statusText = r.warPlayerCard ? "You won the war!" : "You win!";
+            else statusText = r.warPlayerCard ? "The dealer won the war." : "Dealer wins.";
+          }
+
+          const chipsHtml = CHIPS.map((v) => `<button class="chip ${state.selectedChip === v ? "selected" : ""}" data-chip="${v}" ${roundLocked ? "disabled" : ""}>${v}</button>`).join("");
+          const showChipControls = state.selectedChip !== null;
+          const betInputInner = showChipControls
+            ? `<div class="chip-pill"><span class="chip-pill-amt">$${state.selectedChip}</span><button class="chip-add-btn" data-chip-add title="Add $${state.selectedChip} to bet">+</button><button class="chip-clear-btn" data-chip-clear title="Clear selection">${svg("x")}</button></div>`
+            : `<div class="bet-quick"><button data-half ${roundLocked ? "disabled" : ""}>1/2</button><button data-double-bet ${roundLocked ? "disabled" : ""}>2x</button></div>`;
+
+          content.innerHTML = `
+            <div class="game-page">
+              <div class="game-shell">
+                <div class="shell-grid table-layout">
+
+                  <header class="title-bar">
+                    <button class="game-icon-btn hover-tip" data-hover-tip="Game info" data-info>${svg("safe")}</button>
+                    <div class="title-name">${svg("spark")} ${GAME_NAME}</div>
+                    <button class="fair-play-btn" data-fair-play>${svg("safe")} Fair Play</button>
+                  </header>
+
+                  <section class="game-box war-box">
+                    <div class="war-deck">${cardBackHTML()}</div>
+                    <div class="war-oval">
+                      <div class="war-lanes">
+                        <div class="war-lane">
+                          <div class="war-lane-label">Dealer</div>
+                          <div class="war-lane-cards ${dealerPulse}">${dealerCardsHtml || cardBackHTML()}</div>
+                          <div class="war-lane-outcome ${dealerWonLane ? "win" : (playerWonLane ? "lose" : "")}">${outcomeLabel(false)}</div>
+                        </div>
+
+                        <div class="war-mid-stack">
+                          ${!r.active ? `<div class="war-pay-banner"><div class="war-ribbon">Win Pays 1 to 1</div></div>` : ""}
+                          ${statusText ? `<div class="war-status-banner">${statusText}</div>` : ""}
+                        </div>
+
+                        <div class="war-lane">
+                          <div class="war-lane-outcome ${playerWonLane ? "win" : (dealerWonLane ? "lose" : (pushLane ? "push" : ""))}">${outcomeLabel(true)}</div>
+                          <div class="war-lane-cards ${playerPulse}">${playerCardsHtml || cardBackHTML()}</div>
+                          <div class="war-lane-label">You</div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <div class="controls-panel">
+                    <div class="war-dock-wrap ${inDecision ? "decision-dock" : (canPlaceBet ? "" : "dock-hidden")}">
+                      ${inDecision
+                        ? `<div class="war-decision-row">
+                            <button class="war-decision-btn surrender" data-surrender>Surrender</button>
+                            <button class="war-decision-btn go-to-war" data-go-to-war ${r.bet > balance ? "disabled" : ""}>Go To War · ${Shell.fmtMoney(r.bet)}</button>
+                          </div>`
+                        : `<button class="place-bet-btn" data-place ${canPlaceBet ? "" : "disabled"}>${hasBet ? "Place Bet" : "Place Demo Bet"}</button>`}
+                    </div>
+
+                    <div class="war-action-row">
+                      <div class="side-bet-slot">
+                        <span class="side-bet-label">Tie</span>
+                        <div class="side-bet-circle-wrap">
+                          <button class="side-bet-circle ${state.sideBets.tie > 0 ? "has-amount" : ""} ${tieResult && tieResult.won ? "side-bet-won" : ""} ${tieResult && !tieResult.won ? "side-bet-lost" : ""}" data-sidebet="tie" ${roundLocked ? "disabled" : ""}>${state.sideBets.tie > 0 ? "$" + state.sideBets.tie.toFixed(0) : "+"}</button>
+                          ${state.sideBets.tie > 0 && !roundLocked ? `<button class="side-bet-clear" data-sidebet-clear="tie">${svg("x")}</button>` : ""}
+                          ${tieResult ? `<div class="side-bet-result ${tieResult.won ? "win" : "lose"}">${tieResult.won ? "+$" + tieResult.profit.toFixed(0) : "Lost"}</div>` : ""}
+                        </div>
+                        <span class="side-bet-payout-note">Pays ${TIE_PAYOUT}:1</span>
+                      </div>
+
+                      <div class="war-center-note"><div class="war-center-pill">Win Pays 1 to 1</div></div>
+
+                      <div class="side-bet-slot">
+                        <span class="side-bet-label">Coloured Tie</span>
+                        <div class="side-bet-circle-wrap">
+                          <button class="side-bet-circle ${state.sideBets.colouredTie > 0 ? "has-amount" : ""} ${colouredTieResult && colouredTieResult.won ? "side-bet-won" : ""} ${colouredTieResult && !colouredTieResult.won ? "side-bet-lost" : ""}" data-sidebet="colouredTie" ${roundLocked ? "disabled" : ""}>${state.sideBets.colouredTie > 0 ? "$" + state.sideBets.colouredTie.toFixed(0) : "+"}</button>
+                          ${state.sideBets.colouredTie > 0 && !roundLocked ? `<button class="side-bet-clear" data-sidebet-clear="colouredTie">${svg("x")}</button>` : ""}
+                          ${colouredTieResult ? `<div class="side-bet-result ${colouredTieResult.won ? "win" : "lose"}">${colouredTieResult.won ? "+$" + colouredTieResult.profit.toFixed(0) : "Lost"}</div>` : ""}
+                        </div>
+                        <span class="side-bet-payout-note">Pays ${COLOURED_TIE_PAYOUT}:1</span>
+                      </div>
+                    </div>
+
+                    <div class="chip-row">
+                      <div class="chips">${chipsHtml}</div>
+                      <div class="war-bet-input">
+                        <span class="prefix">$</span>
+                        <input type="text" inputmode="decimal" placeholder="0.00" value="${state.betAmount}" data-bet-input ${roundLocked ? "disabled" : ""}>
+                        ${betInputInner}
+                        ${insufficientBalance ? `<div class="balance-error">Insufficient balance</div>` : (belowMinBet ? `<div class="balance-error">Minimum bet is ${Shell.fmtMoney(Shell.MIN_BET)}</div>` : "")}
+                      </div>
+                    </div>
+                  </div>
+
+                  <footer class="bottom-bar">
+                    <div class="bottom-icons">
+                      <div style="position:relative;">
+                        <button class="bottom-icon-btn ${state.settingsOpen ? "active" : ""}" data-settings-toggle title="Settings">${svg("settings")}</button>
+                        ${state.settingsOpen ? `
+                        <div class="popover" data-settings-popover>
+                          <div class="popover-title">Game Settings</div>
+                          <div class="popover-row"><span>Animations</span><button class="switch ${state.settings.animations ? "on" : ""}" data-toggle-setting="animations" ${Shell.isAnimationsDisabled() ? "disabled" : ""}></button></div>
+                          <div class="volume-row"><span>Volume — ${state.settings.volume}%</span><input type="range" min="0" max="100" value="${state.settings.volume}" data-volume-slider></div>
+                        </div>` : ""}
+                      </div>
+                      <button class="bottom-icon-btn ${state.favorite ? "fav-on" : ""}" data-fav-toggle title="Favorite">${svg("heart")}</button>
+                      <button class="bottom-icon-btn ${state.statsOpen ? "active" : ""}" data-stats-toggle title="Live stats">${svg("activity")}</button>
+                    </div>
+                    <div class="bottom-logo">Neon Jackpot</div>
+                  </footer>
+                </div>
+
+                ${Shell.statsPanelHTML(state, GAME_ID, GAME_NAME)}
+              </div>
+            </div>
+
+            ${state.infoOpen ? `
+            <div class="modal-overlay" data-info-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>War</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Highest card wins. You and the dealer each get one card — Aces are high, 2s are low. Beat the dealer's card for an even-money (1:1) payout.</p>
+                <p>If you tie, choose to <strong>Surrender</strong> (forfeit half your bet) or <strong>Go To War</strong> (double your stake — three cards are burned, then one final card is dealt to both sides). Win the war and you get your original bet back as a push, plus 1:1 profit on the raised portion. Lose the war and both bets are gone. Tie again and you get a bonus payout.</p>
+                <div class="modal-stats"><div><span>Decks</span><strong>8</strong></div><div><span>Win Pays</span><strong>1:1</strong></div><div><span>War Tie Bonus</span><strong>${WAR_TIE_BONUS}x</strong></div></div>
+              </div>
+            </div>` : ""}
+            ${state.fairPlayOpen ? `
+            <div class="modal-overlay" data-fair-play-overlay>
+              <div class="modal-box">
+                <div class="modal-head"><h3>${svg("safe")} Fair Play</h3><button class="modal-close" data-modal-close>${svg("x")}</button></div>
+                <p>Each 8-deck shoe is shuffled using a client seed so the card order can't be predicted in advance.</p>
+                <div class="seed-row">
+                  <input type="text" value="${state.clientSeed}" data-client-seed>
+                  <button class="seed-randomize" data-randomize-seed>${svg("rotate")} New</button>
+                </div>
+                <div class="seed-note">This is a demo — nothing here affects real outcomes.</div>
+              </div>
+            </div>` : ""}
+          `;
+
+          state.seenCardIds = new Set([...state.seenCardIds, ...newCardIdsThisRender]);
+          bind();
+          Shell.bindStatsPanel(state, render);
+        }
+
+        // ---------- bind ----------
+        function bind() {
+          document.querySelector("[data-place]")?.addEventListener("click", startRound);
+          document.querySelector("[data-surrender]")?.addEventListener("click", surrender);
+          document.querySelector("[data-go-to-war]")?.addEventListener("click", goToWar);
+
+          const betInput = document.querySelector("[data-bet-input]");
+          betInput?.addEventListener("input", (e) => { state.betAmount = e.target.value.replace(/[^0-9.]/g, ""); render(); refocus("[data-bet-input]"); });
+          document.querySelector("[data-half]")?.addEventListener("click", () => { const b = parseFloat(state.betAmount) || 0; state.betAmount = (b / 2).toFixed(2); render(); });
+          document.querySelector("[data-double-bet]")?.addEventListener("click", () => { const b = parseFloat(state.betAmount) || 0; state.betAmount = Math.min(b * 2 || 0, Shell.getBalance()).toFixed(2); render(); });
+
+          document.querySelectorAll("[data-chip]").forEach((btn) => btn.onclick = () => {
+            const v = parseFloat(btn.dataset.chip);
+            state.selectedChip = v;
+            Shell.playChipSound("select", state.settings.volume);
+            render();
+          });
+          document.querySelector("[data-chip-add]")?.addEventListener("click", () => {
+            if (state.selectedChip == null) return;
+            const current = parseFloat(state.betAmount) || 0;
+            state.betAmount = Math.min(current + state.selectedChip, Shell.getBalance()).toFixed(2);
+            render();
+          });
+          document.querySelector("[data-chip-clear]")?.addEventListener("click", () => { state.selectedChip = null; render(); });
+
+          document.querySelectorAll("[data-sidebet]").forEach((btn) => btn.addEventListener("click", () => {
+            const key = btn.dataset.sidebet;
+            if (state.round.active && !state.round.resolved) return;
+            if (state.selectedChip == null) { Shell.notify("Select a chip first, then tap Tie or Coloured Tie to place it."); return; }
+            state.sideBets[key] = (state.sideBets[key] || 0) + state.selectedChip;
+            render();
+          }));
+          document.querySelectorAll("[data-sidebet-clear]").forEach((btn) => btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            state.sideBets[btn.dataset.sidebetClear] = 0;
+            render();
+          }));
+
+          document.querySelector("[data-info]")?.addEventListener("click", () => { state.infoOpen = true; render(); });
+          document.querySelector("[data-fair-play]")?.addEventListener("click", () => { state.fairPlayOpen = true; render(); });
+          document.querySelectorAll("[data-modal-close]").forEach((btn) => btn.onclick = () => { state.infoOpen = false; state.fairPlayOpen = false; render(); });
+          document.querySelector("[data-info-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.infoOpen = false; render(); } });
+          document.querySelector("[data-fair-play-overlay]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) { state.fairPlayOpen = false; render(); } });
+          document.querySelector("[data-client-seed]")?.addEventListener("input", (e) => { state.clientSeed = e.target.value; });
+          document.querySelector("[data-randomize-seed]")?.addEventListener("click", () => {
+            const chars = "abcdef0123456789";
+            const gen = () => Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+            state.clientSeed = `${gen()}-${gen()}-${gen()}-${gen()}`;
+            render();
+          });
+
+          document.querySelector("[data-settings-toggle]")?.addEventListener("click", (e) => { e.stopPropagation(); state.settingsOpen = !state.settingsOpen; render(); });
+          document.querySelectorAll("[data-toggle-setting]").forEach((btn) => btn.onclick = (e) => { e.stopPropagation(); const key = btn.dataset.toggleSetting; state.settings[key] = !state.settings[key]; render(); });
+          document.querySelector("[data-volume-slider]")?.addEventListener("input", (e) => { state.settings.volume = parseInt(e.target.value, 10); });
+
+          document.querySelector("[data-stats-toggle]")?.addEventListener("click", () => { state.statsOpen = !state.statsOpen; render(); });
+
+          document.querySelector("[data-fav-toggle]")?.addEventListener("click", () => {
+            Shell.toggleFavorite(GAME_ID);
+            state.favorite = Shell.getFavorites().includes(GAME_ID);
+            render();
+          });
+
+          document.addEventListener("click", (e) => {
+            if (state.settingsOpen && !e.target.closest("[data-settings-popover]") && !e.target.closest("[data-settings-toggle]")) {
+              state.settingsOpen = false; render();
+            }
+          }, { once: true });
+        }
+
+        Shell.attachStatsPanelDrag(state, render);
+
+        state.shoe = freshShoe();
+
+        // Restore a round left mid-play (idle screen, decision prompt, or war reveal) instead of
+        // dropping the player back to an empty table and forfeiting whatever's on the table.
+        (function restoreRound() {
+          const saved = Shell.loadActiveRound(GAME_ID);
+          if (!saved || !saved.round) return;
+          state.round = saved.round;
+          state.shoe = Array.isArray(saved.shoe) && saved.shoe.length ? saved.shoe : freshShoe();
+          state.sideBets = saved.sideBets || state.sideBets;
+          if (typeof saved.cardSeq === "number") cardSeq = saved.cardSeq;
+          const allCards = [state.round.playerCard, state.round.dealerCard, state.round.warPlayerCard, state.round.warDealerCard].filter(Boolean);
+          allCards.forEach((c) => state.seenCardIds.add(c.id));
+        })();
+
+        render();
+      })();
+    </script>
+  </body>
+</html>
