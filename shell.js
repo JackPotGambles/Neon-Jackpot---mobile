@@ -84,6 +84,29 @@ window.Shell = (() => {
     });
   }
 
+  // Checks Firebase for a newer copy of the currently active account and, if the cloud
+  // version is newer than what's on this device, loads it in. Called on every page load.
+  async function pullLatestAccountIfNewer() {
+    const username = getActiveAccountUsername();
+    if (!username) return;
+    const cloudAcct = await cloudFetchAccount(username);
+    if (!cloudAcct) return;
+
+    const accts = getAccounts();
+    const localAcct = accts[username];
+    const localSavedAt = (localAcct && localAcct.savedAt) || 0;
+    const cloudSavedAt = cloudAcct.savedAt || 0;
+
+    if (cloudSavedAt > localSavedAt) {
+      loadSnapshotIntoLive(cloudAcct.snapshot);
+      accts[username] = cloudAcct;
+      setAccounts(accts);
+      document.dispatchEvent(new CustomEvent("nj:balance", { detail: getBalance() }));
+      document.dispatchEvent(new CustomEvent("nj:betlog", { detail: getBetLog() }));
+      document.dispatchEvent(new CustomEvent("nj:cases", { detail: raffleSpinsAvailable() }));
+    }
+  }
+
   // Fetches one account from Firebase. Returns a Promise resolving to the account object
   // ({password, snapshot}) or null if it doesn't exist / Firebase isn't reachable.
   function cloudFetchAccount(username) {
@@ -561,8 +584,9 @@ window.Shell = (() => {
     const accts = getAccounts();
     if (!accts[username]) return;
     accts[username].snapshot = snapshotCurrentState();
+    accts[username].savedAt = Date.now(); // NEW — lets other devices know how fresh this copy is
     setAccounts(accts);
-    cloudSaveAccount(username, accts[username]); // NEW — keep the cloud copy up to date too
+    cloudSaveAccount(username, accts[username]);
   }
 
   // ---------- register a brand-new account (used by the post-logout Register screen) ----------
@@ -3533,7 +3557,19 @@ window.Shell = (() => {
     const grid = document.querySelector(".site-grid");
     if (grid) grid.classList.toggle("sidebar-collapsed", isSidebarCollapsed());
     bindChrome();
-    if (isLoggedOut()) renderLoginGate();
+    if (isLoggedOut()) {
+      renderLoginGate();
+    } else {
+      // NEW — pull down any newer progress from another device, then repaint the chrome
+      // (balance, favorites badge, etc.) once it lands.
+      pullLatestAccountIfNewer().then(() => {
+        const topEl = document.querySelector(topbarTarget);
+        const sideEl = document.querySelector(sidebarTarget);
+        if (topEl) topEl.innerHTML = topbarHTML();
+        if (sideEl) sideEl.innerHTML = sidebarHTML(activeTab);
+        bindChrome();
+      });
+    }
     setupAccountAutosave();
   }
 
@@ -3544,7 +3580,7 @@ window.Shell = (() => {
   function setupAccountAutosave() {
     if (__njAutosaveSetup) return;
     __njAutosaveSetup = true;
-    setInterval(() => { if (!isLoggedOut()) persistActiveAccount(); }, 30000);
+    setInterval(() => { if (!isLoggedOut()) persistActiveAccount(); }, 10000);
     window.addEventListener("beforeunload", () => { if (!isLoggedOut()) persistActiveAccount(); });
   }
 
