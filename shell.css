@@ -783,8 +783,8 @@ html.nj-no-animations *::after {
 .chat-send-btn svg { width: 15px; height: 15px; }
 .chat-send-btn:disabled { color: #6c7488; background: #1b2032; }
 
-@media (max-width: 760px) {
-  .chat-panel { width: 100vw; max-width: 100vw; }
+@media (max-width: 760px) and (orientation: portrait) {
+  .chat-panel { width: 88vw; max-width: 360px; }
 }
 
 /* update-required lockout — covers the entire viewport, above everything else, no dismiss */
