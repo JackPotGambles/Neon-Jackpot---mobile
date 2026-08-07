@@ -181,22 +181,91 @@ window.Chat = (() => {
   // the most recent MAX_MESSAGES. We only ever query the last 100 from
   // Firebase itself (limitToLast) to keep the initial load light.
   // ---------------------------------------------------------------------
+  let lastSeenMsgKey = null;
+  let chatSyncPrimed = false; // becomes true after the very first snapshot, so we never ding for old history on page load
+
   function startChatSync() {
     if (!ready) return;
     const chatRef = db.ref("chat").limitToLast(100);
     unsubscribeChat = chatRef.on("value", (snap) => {
       const val = snap.val() || {};
       messages = Object.entries(val)
-        .map(([id, m]) => ({ id, ...m }))
+        .map(([msgKey, m]) => ({ msgKey, ...m }))
         .sort((a, b) => (a.time || 0) - (b.time || 0))
         .slice(-MAX_MESSAGES);
+
+      const newest = messages[messages.length - 1];
+      const myId = Shell.getPlayerProfile().id;
+      if (chatSyncPrimed && newest && newest.msgKey !== lastSeenMsgKey && newest.id !== myId) {
+        if (!isPanelOpen()) playNewMessageTone();
+      }
+      if (newest) lastSeenMsgKey = newest.msgKey;
+      chatSyncPrimed = true;
+
       renderMessages();
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // DEV CHAT COMMANDS — only usable by accounts with Shell.isDeveloper()
+  // true. Typed into the chat input like a normal message; never sent to
+  // Firebase as a chat message, always intercepted client-side first.
+  // ---------------------------------------------------------------------
+  function isDevCommand(text) {
+    return text.trim().startsWith("/");
+  }
+
+  function runDevCommand(raw) {
+    const text = raw.trim();
+    const [cmd, ...args] = text.slice(1).split(/\s+/);
+
+    if (!Shell.isDeveloper()) {
+      Shell.notify("That's a developer-only command.");
+      return;
+    }
+
+    switch ((cmd || "").toLowerCase()) {
+      case "clear":
+      case "clearchat":
+        if (!ready) { Shell.notify("Chat isn't connected."); return; }
+        db.ref("chat").remove().then(() => {
+          Shell.notify("Chat cleared for everyone.");
+        }).catch(() => Shell.notify("Couldn't clear chat — check permissions."));
+        break;
+
+      case "kick": {
+        // Removes a player's presence entry (makes them show offline). Does not
+        // actually disconnect them — it's cosmetic, since there's no real server
+        // session to terminate.
+        const targetId = (args[0] || "").toUpperCase();
+        if (!targetId || !ready) { Shell.notify("Usage: /kick PLAYERID"); return; }
+        db.ref("presence/" + targetId).remove();
+        Shell.notify(`Removed ${targetId} from the online list.`);
+        break;
+      }
+
+      case "announce": {
+        const msg = args.join(" ");
+        if (!msg || !ready) { Shell.notify("Usage: /announce your message"); return; }
+        db.ref("chat").push({
+          id: "", // no id -> not clickable as a profile, reads as a system message
+          name: "📢 Announcement",
+          color: "#ffcf7d",
+          text: msg.slice(0, 500),
+          time: firebase.database.ServerValue.TIMESTAMP,
+        });
+        break;
+      }
+
+      default:
+        Shell.notify(`Unknown command: /${cmd}`);
+    }
   }
 
   function sendMessage(text) {
     const clean = (text || "").trim();
     if (!clean || !ready) return;
+    if (isDevCommand(clean)) { runDevCommand(clean); return; }
     const player = Shell.getPlayerProfile();
     db.ref("chat").push({
       id: player.id, // lets a click on this message's name open that player's profile card
@@ -245,6 +314,48 @@ window.Chat = (() => {
     return new Date(ts).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   }
 
+  // ---------------------------------------------------------------------
+  // Subtle "new message" notification tone — plays once whenever a new
+  // incoming message arrives while the panel is closed. Deliberately soft
+  // and short, not a loud alert sound.
+  // ---------------------------------------------------------------------
+  let chatAudioCtx = null;
+  function playNewMessageTone() {
+    try {
+      if (!chatAudioCtx) chatAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const ctx = chatAudioCtx;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(920, now);
+      osc.frequency.exponentialRampToValueAtTime(700, now + 0.12);
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.09, now + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.24);
+    } catch {}
+  }
+
+  // Returns the CURRENT name/color for whoever sent a message, so renaming/recoloring your
+  // profile updates every past message you've sent instead of leaving old ones stuck showing
+  // your old name forever. Falls back to what was stored on the message itself only if we
+  // have no better info (e.g. the sender has never been seen online since we connected).
+  function liveNameAndColor(m) {
+    if (m.id) {
+      if (m.id === Shell.getPlayerProfile().id) {
+        const me = Shell.getPlayerProfile();
+        return { name: me.name, color: me.avatarColor || myChatColor() };
+      }
+      const p = presenceMap[m.id];
+      if (p && p.name) return { name: p.name, color: p.color || "#5cffe7" };
+    }
+    return { name: m.name || "Player", color: m.color || "#5cffe7" };
+  }
+
+
   function renderMessages() {
     const box = document.querySelector("[data-chat-messages]");
     if (!box) return;
@@ -252,11 +363,14 @@ window.Chat = (() => {
     const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
 
     box.innerHTML = messages.length
-      ? messages.map((m) => `<div class="chat-msg">
-          <span class="chat-msg-name${m.id ? " hover-tip" : ""}" ${m.id ? `data-hover-tip="View profile" data-profile-id="${escapeHTML(m.id)}"` : ""} style="color:${m.color || "#5cffe7"};${m.id ? "cursor:pointer;" : ""}">${escapeHTML(m.name || "Player")}</span>
+      ? messages.map((m) => {
+          const live = liveNameAndColor(m);
+          return `<div class="chat-msg">
+          <span class="chat-msg-name${m.id ? " hover-tip" : ""}" ${m.id ? `data-hover-tip="View profile" data-profile-id="${escapeHTML(m.id)}"` : ""} style="color:${live.color};${m.id ? "cursor:pointer;" : ""}">${escapeHTML(live.name)}</span>
           <span class="chat-msg-time">${fmtTime(m.time)}</span>
           <div class="chat-msg-text">${escapeHTML(m.text)}</div>
-        </div>`).join("")
+        </div>`;
+        }).join("")
       : `<div class="chat-empty">${isConfigured() ? "No messages yet — say hi!" : "Chat isn't connected. See chat.js for setup."}</div>`;
 
     if (atBottom) box.scrollTop = box.scrollHeight;
@@ -264,7 +378,7 @@ window.Chat = (() => {
     // unread dot: only show when the panel is closed and the newest message isn't from me
     const last = messages[messages.length - 1];
     const dot = document.querySelector("[data-chat-unread-dot]");
-    if (dot) dot.style.display = (!isPanelOpen() && last && last.name !== Shell.getPlayerProfile().name) ? "block" : "none";
+    if (dot) dot.style.display = (!isPanelOpen() && last && last.id !== Shell.getPlayerProfile().id) ? "block" : "none";
   }
 
   function renderPresenceList() {
