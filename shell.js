@@ -3787,6 +3787,7 @@ window.Shell = (() => {
         if (topEl) topEl.innerHTML = topbarHTML();
         if (sideEl) sideEl.innerHTML = sidebarHTML(activeTab);
         bindChrome();
+        document.dispatchEvent(new CustomEvent("nj:chrome-repainted"));
       });
     }
     setupAccountAutosave();
