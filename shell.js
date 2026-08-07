@@ -89,21 +89,27 @@ window.Shell = (() => {
   async function pullLatestAccountIfNewer() {
     const username = getActiveAccountUsername();
     if (!username) return;
-    const cloudAcct = await cloudFetchAccount(username);
-    if (!cloudAcct) return;
+    liveAccountPullInFlight = true;
+    try {
+      const cloudAcct = await cloudFetchAccount(username);
+      if (!cloudAcct) return;
 
-    const accts = getAccounts();
-    const localAcct = accts[username];
-    const localSavedAt = (localAcct && localAcct.savedAt) || 0;
-    const cloudSavedAt = cloudAcct.savedAt || 0;
+      const accts = getAccounts();
+      const localAcct = accts[username];
+      const localSavedAt = (localAcct && localAcct.savedAt) || 0;
+      const cloudSavedAt = cloudAcct.savedAt || 0;
 
-    if (cloudSavedAt > localSavedAt) {
-      loadSnapshotIntoLive(cloudAcct.snapshot);
-      accts[username] = cloudAcct;
-      setAccounts(accts);
-      document.dispatchEvent(new CustomEvent("nj:balance", { detail: getBalance() }));
-      document.dispatchEvent(new CustomEvent("nj:betlog", { detail: getBetLog() }));
-      document.dispatchEvent(new CustomEvent("nj:cases", { detail: raffleSpinsAvailable() }));
+      if (cloudSavedAt > localSavedAt) {
+        loadSnapshotIntoLive(cloudAcct.snapshot);
+        accts[username] = cloudAcct;
+        setAccounts(accts);
+        document.dispatchEvent(new CustomEvent("nj:balance", { detail: getBalance() }));
+        document.dispatchEvent(new CustomEvent("nj:betlog", { detail: getBetLog() }));
+        document.dispatchEvent(new CustomEvent("nj:cases", { detail: raffleSpinsAvailable() }));
+      }
+      liveAccountGen = Math.max(liveAccountGen, cloudSavedAt);
+    } finally {
+      liveAccountPullInFlight = false;
     }
   }
 
@@ -777,16 +783,36 @@ window.Shell = (() => {
     });
   }
 
-  // ---- everything else: whole-snapshot push, same as before, for non-money fields ----
+  // ---------------------------------------------------------------------
+  // Guards against a stale tab overwriting newer data. Bumped every time
+  // we successfully pull or push, so a push can only succeed if it's not
+  // older than the last known state.
+  // ---------------------------------------------------------------------
+  let liveAccountGen = 0;
+  let liveAccountPullInFlight = false;
+
   function pushLiveAccountState() {
     if (applyingRemoteAccountUpdate) return;
+    if (liveAccountPullInFlight) return; // NEVER push while a pull is still resolving
     clearTimeout(pushLiveAccountTimer);
     pushLiveAccountTimer = setTimeout(() => {
+      if (liveAccountPullInFlight) return; // re-check after the debounce delay too
       const username = getActiveAccountUsername();
       const db = getCloudDb();
       if (!username || !db) return;
       const snapshot = snapshotCurrentState();
-      db.ref("liveAccounts/" + username).set({ snapshot, savedAt: Date.now() }).catch(() => {});
+      const myGen = Date.now();
+      const ref = db.ref("liveAccounts/" + username);
+      // Transaction instead of a blind .set() — refuses to write if the server's
+      // savedAt is already newer than what we saw last (someone else wrote first).
+      ref.transaction((current) => {
+        if (current && current.savedAt && current.savedAt > liveAccountGen) {
+          return; // abort — server has something newer than what we're aware of
+        }
+        return { snapshot, savedAt: myGen };
+      }).then((result) => {
+        if (result.committed) liveAccountGen = myGen;
+      }).catch(() => {});
     }, 120);
   }
 
@@ -806,6 +832,7 @@ window.Shell = (() => {
       if (!val || !val.snapshot) return;
       if ((val.savedAt || 0) <= lastAppliedSavedAt) return;
       lastAppliedSavedAt = val.savedAt || 0;
+      liveAccountGen = Math.max(liveAccountGen, val.savedAt || 0); // ADD THIS LINE
       applyingRemoteAccountUpdate = true;
       // IMPORTANT: only load the non-money keys from this whole-snapshot blob now — the
       // money/critical fields (cash, vault, reward, lifetimeWagered) are owned by the
@@ -3827,23 +3854,21 @@ window.Shell = (() => {
     startLiveAccountSync();
   }
 
-  // Periodically snapshots the active account's live state back into the account registry, plus
-  // on tab close, so progress from this session isn't lost if the player never explicitly logs
-  // out. Guarded so multiple mount() calls (one per page nav) don't stack up multiple intervals.
   let __njAutosaveSetup = false;
   function setupAccountAutosave() {
     if (__njAutosaveSetup) return;
     __njAutosaveSetup = true;
     setInterval(() => {
-      // A backgrounded/hidden tab (e.g. a phone tab you switched away from hours ago) must
-      // never autosave — its in-memory state is frozen from whenever it was last active, and
-      // blindly pushing that stale snapshot on a timer is exactly what overwrites newer
-      // progress made on another device in the meantime. Only the tab the player is actually
-      // looking at right now is allowed to autosave.
       if (document.hidden) return;
+      if (liveAccountPullInFlight) return; // don't autosave while we're mid-resync
       if (!isLoggedOut()) { persistActiveAccount(); pushLiveAccountState(); }
     }, 5000);
-    window.addEventListener("beforeunload", () => { if (!isLoggedOut() && !document.hidden) { persistActiveAccount(); pushLiveAccountState(); } });
+    window.addEventListener("beforeunload", () => {
+      if (!isLoggedOut() && !document.hidden && !liveAccountPullInFlight) {
+        persistActiveAccount();
+        pushLiveAccountState();
+      }
+    });
   }
 
   // ===================== LOGOUT / LOGIN GATE =====================
