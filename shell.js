@@ -3872,13 +3872,23 @@ window.Shell = (() => {
   }
 
   let __njAutosaveSetup = false;
+  let __njLastAutosaveSnapshot = "";
   function setupAccountAutosave() {
     if (__njAutosaveSetup) return;
     __njAutosaveSetup = true;
     setInterval(() => {
       if (document.hidden) return;
       if (liveAccountPullInFlight) return; // don't autosave while we're mid-resync
-      if (!isLoggedOut()) { persistActiveAccount(); pushLiveAccountState(); }
+      if (isLoggedOut()) return;
+      // Only actually push to Firebase if something in the snapshot has changed since the
+      // last time we pushed — otherwise this was silently re-uploading (and re-downloading,
+      // via our own liveAccounts listener) the full account blob, including any uploaded
+      // avatar image, every 20 seconds forever, whether or not anything changed.
+      const snap = JSON.stringify(snapshotCurrentState());
+      if (snap === __njLastAutosaveSnapshot) { persistActiveAccount(); return; }
+      __njLastAutosaveSnapshot = snap;
+      persistActiveAccount();
+      pushLiveAccountState();
     }, 20000);
     window.addEventListener("beforeunload", () => {
       if (!isLoggedOut() && !document.hidden && !liveAccountPullInFlight) {
