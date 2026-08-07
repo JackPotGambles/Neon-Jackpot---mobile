@@ -107,6 +107,32 @@ window.Shell = (() => {
     }
   }
 
+  // Whenever this tab goes from hidden back to visible, treat it exactly like a fresh
+  // mount(): re-pull the latest cloud copy first, before anything in this tab is allowed to
+  // push its own (possibly hours-stale) state back up. This is what closes the "phone tab
+  // left open for hours while PC played" bug — without this, the phone tab's very next
+  // 5-second autosave tick would blindly overwrite the PC's newer progress.
+  function setupVisibilityResync() {
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) return;
+      if (isLoggedOut()) return;
+      pullLatestAccountIfNewer().then(() => {
+        document.dispatchEvent(new CustomEvent("nj:balance", { detail: getBalance() }));
+        document.dispatchEvent(new CustomEvent("nj:vault", { detail: getVaultBalance() }));
+        document.dispatchEvent(new CustomEvent("nj:betlog", { detail: getBetLog() }));
+        document.dispatchEvent(new CustomEvent("nj:reward", { detail: getRewardBalance() }));
+        document.dispatchEvent(new CustomEvent("nj:cases", { detail: raffleSpinsAvailable() }));
+        // Repaint the chrome (balance/sidebar numbers) so what's on screen matches what was
+        // just pulled in, without requiring a manual refresh.
+        const topEl = document.querySelector("#site-topbar");
+        const sideEl = document.querySelector("#site-sidebar");
+        if (topEl) topEl.innerHTML = topbarHTML();
+        if (sideEl) sideEl.innerHTML = sidebarHTML(document.querySelector(".rail-link.active")?.textContent?.trim() || "Lobby");
+        bindChrome();
+      });
+    });
+  }
+
   // Fetches one account from Firebase. Returns a Promise resolving to the account object
   // ({password, snapshot}) or null if it doesn't exist / Firebase isn't reachable.
   function cloudFetchAccount(username) {
@@ -3797,6 +3823,7 @@ window.Shell = (() => {
       });
     }
     setupAccountAutosave();
+    setupVisibilityResync();
     startLiveAccountSync();
   }
 
@@ -3807,8 +3834,16 @@ window.Shell = (() => {
   function setupAccountAutosave() {
     if (__njAutosaveSetup) return;
     __njAutosaveSetup = true;
-    setInterval(() => { if (!isLoggedOut()) { persistActiveAccount(); pushLiveAccountState(); } }, 5000);
-    window.addEventListener("beforeunload", () => { if (!isLoggedOut()) { persistActiveAccount(); pushLiveAccountState(); } });
+    setInterval(() => {
+      // A backgrounded/hidden tab (e.g. a phone tab you switched away from hours ago) must
+      // never autosave — its in-memory state is frozen from whenever it was last active, and
+      // blindly pushing that stale snapshot on a timer is exactly what overwrites newer
+      // progress made on another device in the meantime. Only the tab the player is actually
+      // looking at right now is allowed to autosave.
+      if (document.hidden) return;
+      if (!isLoggedOut()) { persistActiveAccount(); pushLiveAccountState(); }
+    }, 5000);
+    window.addEventListener("beforeunload", () => { if (!isLoggedOut() && !document.hidden) { persistActiveAccount(); pushLiveAccountState(); } });
   }
 
   // ===================== LOGOUT / LOGIN GATE =====================
