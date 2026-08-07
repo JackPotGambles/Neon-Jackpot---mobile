@@ -503,7 +503,7 @@ window.Shell = (() => {
   // browser (via importAccountCode) restores the exact same balance, bets, rank, rewards, etc.
   // This is entirely local — there's no server; the code IS the save file.
   const SYNC_KEYS = [
-    BALANCE_KEY, VAULT_KEY, BETLOG_KEY, EARN_KEY, NOTIF_KEY, RECENT_SEARCH_KEY,
+    BALANCE_KEY, VAULT_KEY, EARN_KEY, NOTIF_KEY, RECENT_SEARCH_KEY,
     PLAYER_KEY, CLAIM_KEY, CLAIM_TOTALS_KEY, BOOST_KEY, RAFFLE_KEY,
     LIFETIME_WAGERED_KEY, RAKEBACK_KEY, FAVORITES_KEY, SIDEBAR_COLLAPSE_KEY, AVATAR_IMAGE_KEY,
     DEV_KEY, DEV_ENABLED_KEY, DEV_SNAPSHOT_KEY,
@@ -621,7 +621,6 @@ window.Shell = (() => {
     accts[username].snapshot = snapshotCurrentState();
     accts[username].savedAt = Date.now();
     setAccounts(accts);
-    cloudSaveAccount(username, accts[username]);
   }
   // ---------- live full-account sync ----------
   // Instead of syncing individual numbers (balance, vault, cases, passive income...) one at a
@@ -735,7 +734,7 @@ window.Shell = (() => {
   function startLiveBetListener(username) {
     const db = getCloudDb();
     if (!db) return;
-    const ref = db.ref("liveBets/" + username).limitToLast(500);
+    const ref = db.ref("liveBets/" + username).limitToLast(20);
     ref.on("child_added", (snap) => {
       const id = snap.key;
       if (liveBetsSeenIds.has(id)) return;
@@ -1654,7 +1653,7 @@ window.Shell = (() => {
     const list = getBetLog();
     const record = { time: Date.now(), ...entry };
     list.push(record);
-    if (list.length > 2000) list.shift();
+    if (list.length > 20) list.shift();
     setBetLog(list);
     addLifetimeWagered(entry.bet || 0);
     accrueRakeback(entry.bet || 0);
@@ -3862,7 +3861,7 @@ window.Shell = (() => {
       if (document.hidden) return;
       if (liveAccountPullInFlight) return; // don't autosave while we're mid-resync
       if (!isLoggedOut()) { persistActiveAccount(); pushLiveAccountState(); }
-    }, 5000);
+    }, 20000);
     window.addEventListener("beforeunload", () => {
       if (!isLoggedOut() && !document.hidden && !liveAccountPullInFlight) {
         persistActiveAccount();
