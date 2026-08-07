@@ -658,6 +658,17 @@ window.Chat = (() => {
       const player = Shell.getPlayerProfile();
       if (db) db.ref("presence/" + player.id).remove();
     });
+
+    // Shell sometimes rebuilds the topbar asynchronously after mount() (e.g. pulling newer
+    // account data from another device) which wipes out our injected chat button. Re-insert
+    // it (and the panel, if somehow removed) whenever Shell tells us it repainted.
+    document.addEventListener("nj:chrome-repainted", () => {
+      const actionBox = document.querySelector(".top-actions .action-box:last-of-type") || document.querySelector(".top-actions");
+      if (actionBox && !document.querySelector("[data-chat-toggle]")) {
+        actionBox.insertAdjacentHTML("beforeend", toggleBtnHTML());
+        bindPanel();
+      }
+    });
   }
 
   return { mount, isConfigured, setLatestVersion, setDownloadUrl, publishUpdate, getVersionInfo, CURRENT_VERSION, openProfileCard, sendDirectGift };
