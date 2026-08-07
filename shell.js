@@ -862,9 +862,16 @@ window.Shell = (() => {
     startLiveFieldListeners(username);
     startLiveBetListener(username);
     startLiveRaffleListener(username);
-    pushLiveAccountState(); // seed non-money fields on first connect
-    Object.keys(LIVE_FIELD_MAP).forEach(syncLiveField); // seed money fields too
-    pushLiveRaffleState();
+    pushLiveAccountState(); // seed non-money fields on first connect (safely gated by liveAccountGen)
+    // Money fields (cash/vault/reward/lifetimeWagered) and the raffle case count are
+    // intentionally NOT force-pushed here anymore. Blindly pushing the local value on every
+    // fresh page load raced against the real-time listeners started just above
+    // (startLiveFieldListeners / startLiveRaffleListener) and could overwrite a NEWER value
+    // already on the server with a STALE local one — exactly what happened when reopening the
+    // app on a device that had been closed since before a balance change made elsewhere.
+    // The listeners already pull down the correct current value on their own; nothing needs
+    // to be manually "seeded" except when the player actually performs a real balance-changing
+    // action locally, which already calls syncLiveField() via addCashBalance/addVaultBalance/etc.
   }
 
   // ---------- register a brand-new account (used by the post-logout Register screen) ----------
