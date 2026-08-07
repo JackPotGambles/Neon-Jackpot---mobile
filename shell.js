@@ -811,7 +811,11 @@ window.Shell = (() => {
     const uname = (username || "").trim();
     if (!uname || !password) return { ok: false, error: "Enter a username and password." };
     const accts = getAccounts();
-    if (accts[uname]) return { ok: false, error: "That username is already taken." };
+    // Case-insensitive collision check — "Bob" and "bob" must not both be allowed to register,
+    // since it would silently let two different people BOTH claim what looks like the same name.
+    const unameLower = uname.toLowerCase();
+    const taken = Object.keys(accts).some((existing) => existing.toLowerCase() === unameLower);
+    if (taken) return { ok: false, error: "That username is already taken." };
 
     if (seedSnapshot) {
       // Migrating an old sync code into a new account: keep the imported progress as-is.
@@ -821,7 +825,7 @@ window.Shell = (() => {
       SYNC_KEYS.forEach((k) => localStorage.removeItem(k));
       const p = {
         id: genPlayerId(),
-        name: (name || "").trim() || "Nova",
+        name: uname, // display name is always exactly the username — no separate "display name" to mix up
         memberSince: Date.now(),
         avatarColor: avatarColor || "#5cffe7",
         avatarEmoji: (avatarEmoji || "").trim(),
@@ -861,7 +865,9 @@ window.Shell = (() => {
   async function loginToAccount(username, password) {
     const uname = (username || "").trim();
     const accts = getAccounts();
-    let acct = accts[uname];
+    // Case-insensitive lookup — find the stored key that matches regardless of case.
+    const matchKey = Object.keys(accts).find((k) => k.toLowerCase() === uname.toLowerCase());
+    let acct = matchKey ? accts[matchKey] : undefined;
 
     if (!acct) {
       // Not on this device yet — try fetching it from the cloud.
@@ -3192,7 +3198,8 @@ window.Shell = (() => {
           </div>
         </div>
         <div class="vault-field-label">Display name</div>
-        <div class="vault-input-row"><input type="text" maxlength="18" value="${player.name}" data-settings-name placeholder="Your name"></div>
+        <div class="vault-input-row"><input type="text" maxlength="18" value="${player.name}" data-settings-name placeholder="Your name" disabled></div>
+        <div class="settings-swatch-hint" style="margin:-10px 0 14px;">Your display name is always your username, so it can't be changed here.</div>
         <div class="vault-field-label">Avatar emoji (optional)</div>
         <div class="vault-input-row"><input type="text" maxlength="2" value="${player.avatarEmoji || ""}" data-settings-emoji placeholder="e.g. 🎲"></div>
         <button class="vault-submit" data-settings-save>Save changes</button>
@@ -3292,9 +3299,8 @@ window.Shell = (() => {
       if (removeBtn) removeBtn.onclick = () => { setAvatarImage(""); screen = "personalization"; render(); notify("Profile picture removed."); };
 
       wrap.querySelector("[data-settings-save]").onclick = () => {
-        const name = nameInput.value.trim() || "Nova";
+        const name = getPlayerProfile().name; // locked to the username — never editable here
         setPlayerProfile({ name, avatarColor: chosenColor, avatarEmoji: emojiInput.value.trim() });
-        document.querySelectorAll("[data-shell-profile]").forEach((btn) => { if (!getAvatarImage()) btn.textContent = avatarInitials(name); });
         notify("Profile updated.");
         closeAllOverlays();
       };
@@ -3869,7 +3875,7 @@ window.Shell = (() => {
           <button class="vault-submit" style="margin-top:8px;background:#1b2032;color:#b6bfd2;" data-lg-cancel-sync>Cancel</button>`;
       }
       return `
-        <p class="login-gate-blurb">Create a brand-new player — this starts completely fresh (balance, rank, and bets all reset).</p>
+        <p class="login-gate-blurb">Create a brand-new player — this starts completely fresh (balance, rank, and bets all reset). Your username IS your display name — there's no separate one to forget.</p>
         <div class="settings-avatar-row">
           <div class="profile-avatar-lg" data-lg-avatar-preview style="background:${chosenColor};">NV</div>
           <div class="settings-swatches-col">
@@ -3877,12 +3883,10 @@ window.Shell = (() => {
             <span class="settings-swatch-hint">Color shows behind your emoji/initials</span>
           </div>
         </div>
-        <div class="vault-field-label">Display name</div>
-        <div class="vault-input-row"><input type="text" maxlength="18" placeholder="Your name" data-lg-name></div>
         <div class="vault-field-label">Avatar emoji (optional)</div>
         <div class="vault-input-row"><input type="text" maxlength="2" placeholder="e.g. 🎲" data-lg-emoji></div>
-        <div class="vault-field-label">Username</div>
-        <div class="vault-input-row"><input type="text" maxlength="24" placeholder="Choose a username" data-lg-username autocomplete="off"></div>
+        <div class="vault-field-label">Username (this is also your display name)</div>
+        <div class="vault-input-row"><input type="text" maxlength="18" placeholder="Choose a username" data-lg-username autocomplete="off"></div>
         <div class="vault-field-label">Password</div>
         <div class="vault-input-row"><input type="password" placeholder="Choose a password" data-lg-password autocomplete="off"></div>
         <div class="vault-field-label">Retype password</div>
@@ -3937,25 +3941,25 @@ window.Shell = (() => {
         return;
       }
       const preview = wrap.querySelector("[data-lg-avatar-preview]");
-      const nameInput = wrap.querySelector("[data-lg-name]");
+      const usernameInput = wrap.querySelector("[data-lg-username]");
       const emojiInput = wrap.querySelector("[data-lg-emoji]");
       function refreshPreview() {
         preview.style.background = chosenColor;
-        preview.textContent = emojiInput.value.trim() || avatarInitials(nameInput.value);
+        preview.textContent = emojiInput.value.trim() || avatarInitials(usernameInput.value);
       }
       wrap.querySelectorAll("[data-lg-color]").forEach((btn) => btn.onclick = () => {
         chosenColor = btn.dataset.lgColor;
         wrap.querySelectorAll("[data-lg-color]").forEach((b) => b.classList.toggle("active", b === btn));
         refreshPreview();
       });
-      nameInput.addEventListener("input", refreshPreview);
+      usernameInput.addEventListener("input", refreshPreview);
       emojiInput.addEventListener("input", refreshPreview);
       wrap.querySelector("[data-lg-register]").onclick = () => {
-        const username = wrap.querySelector("[data-lg-username]").value;
+        const username = usernameInput.value;
         const password = wrap.querySelector("[data-lg-password]").value;
         const confirmPw = wrap.querySelector("[data-lg-password-confirm]").value;
         if (password !== confirmPw) { registerError = "Those passwords don't match — retype them and try again."; render(); return; }
-        const result = registerAccount({ username, password, name: nameInput.value, avatarColor: chosenColor, avatarEmoji: emojiInput.value });
+        const result = registerAccount({ username, password, avatarColor: chosenColor, avatarEmoji: emojiInput.value });
         if (!result.ok) { registerError = result.error; render(); return; }
         notify("Account created. Welcome!");
         setTimeout(() => window.location.reload(), 500);
