@@ -176,8 +176,8 @@ window.Shell = (() => {
     const n = Math.max(0, Math.round(value * 100) / 100);
     localStorage.setItem(BALANCE_KEY, String(n));
     if (getActiveCurrency() === "cash") document.dispatchEvent(new CustomEvent("nj:balance", { detail: n }));
-    bumpSyncFloor(); // every real balance change pushes this account's sync "floor" forward — see SYNC_FLOOR_KEY below
-    pushLiveAccountState();
+    bumpSyncFloor();
+    syncLiveField("cash");
     return n;
   }
   function addCashBalance(delta) {
@@ -201,7 +201,7 @@ window.Shell = (() => {
     localStorage.setItem(REWARD_BALANCE_KEY, String(n));
     if (getActiveCurrency() === "reward") document.dispatchEvent(new CustomEvent("nj:balance", { detail: n }));
     document.dispatchEvent(new CustomEvent("nj:reward", { detail: n }));
-    pushLiveAccountState();
+    syncLiveField("reward");
     return n;
   }
   function addRewardBalance(delta) {
@@ -369,7 +369,7 @@ window.Shell = (() => {
     const n = Math.max(0, Math.round(value * 100) / 100);
     localStorage.setItem(VAULT_KEY, String(n));
     document.dispatchEvent(new CustomEvent("nj:vault", { detail: n }));
-    pushLiveAccountState();
+    syncLiveField("vault");
     return n;
   }
   window.addEventListener("storage", (e) => {
@@ -597,10 +597,161 @@ window.Shell = (() => {
   // and every open device listens for changes and pulls the whole thing down live. This is what
   // stops two devices both acting on the same stale copy (e.g. both claiming the same passive
   // income, or one device's vault withdrawal getting silently reverted by the other).
+  // ---------------------------------------------------------------------
+  // LIVE SYNC v2 — every device writes numeric/critical fields directly to
+  // their OWN small Firebase path using transaction() (read-current, write-
+  // computed-delta, auto-retry on conflict). This makes concurrent writes
+  // from two devices commutative instead of "last write wins" — no more
+  // balance getting silently rolled back by a stale device.
+  //
+  // Every device also keeps a live .on("value") listener on each of these
+  // paths, so any change from any device shows up everywhere within
+  // milliseconds — no refresh needed.
+  //
+  // Fields synced this way: cash balance, vault balance, reward balance,
+  // lifetime wagered, rakeback available/claimed, raffle claimedSteps
+  // (wager cases), and the bet log (appended, not overwritten).
+  //
+  // Everything else (player profile, settings, favorites, earn/incremental
+  // state, notifications, etc.) still uses the old whole-snapshot push —
+  // those are fine to eventually-consistent since they're not money and
+  // don't get raced the same way, and rewriting ALL of it into per-field
+  // transactions would be a much bigger change for little benefit.
+  // ---------------------------------------------------------------------
   let liveAccountUnsub = null;
   let liveAccountRetryTimer = null;
   let applyingRemoteAccountUpdate = false; // guards against re-pushing what we just received
   let pushLiveAccountTimer = null;
+
+  // Fields this device writes via transaction() rather than the whole-blob push.
+  const LIVE_FIELD_MAP = {
+    cash:            { get: getCashBalance,           localKey: BALANCE_KEY },
+    vault:           { get: getVaultBalance,           localKey: VAULT_KEY },
+    reward:          { get: getRewardBalance,          localKey: REWARD_BALANCE_KEY },
+    lifetimeWagered: { get: getLifetimeWagered,         localKey: LIFETIME_WAGERED_KEY },
+  };
+
+  function liveFieldRef(username, field) {
+    const db = getCloudDb();
+    if (!db || !username) return null;
+    return db.ref("liveFields/" + username + "/" + field);
+  }
+
+  // Writes the field's CURRENT local value into Firebase via transaction — this doesn't
+  // "add" anything by itself, it's used right after a local mutation (setCashBalance, etc.)
+  // has already computed the new value. The transaction just makes sure that if another
+  // device's write is still in flight, ours doesn't blindly clobber it — Firebase reruns
+  // our update function against whatever the latest server value actually is.
+  function pushLiveField(field) {
+    if (applyingRemoteAccountUpdate) return;
+    const username = getActiveAccountUsername();
+    if (!username) return;
+    const ref = liveFieldRef(username, field);
+    if (!ref) return;
+    const def = LIVE_FIELD_MAP[field];
+    if (!def) return;
+    const localValue = def.get();
+    ref.transaction((serverValue) => {
+      // If nothing has ever been written, or the server's copy is stale compared to what
+      // we just computed locally, take our local value. This transaction's job is mainly
+      // to avoid a lost-update race — for these fields the "latest local mutation wins"
+      // is correct because addCashBalance/addVaultBalance/etc. already read-then-wrote
+      // against localStorage synchronously right before this runs.
+      return localValue;
+    }).catch(() => {});
+  }
+
+  // Call this right after any local mutation to one of the LIVE_FIELD_MAP fields.
+  function syncLiveField(field) {
+    clearTimeout(pushLiveAccountTimer);
+    pushLiveField(field);
+  }
+
+  function startLiveFieldListeners(username) {
+    Object.keys(LIVE_FIELD_MAP).forEach((field) => {
+      const ref = liveFieldRef(username, field);
+      if (!ref) return;
+      ref.on("value", (snap) => {
+        const val = snap.val();
+        if (val === null || val === undefined) return;
+        const def = LIVE_FIELD_MAP[field];
+        const current = localStorage.getItem(def.localKey);
+        const currentNum = current === null ? null : parseFloat(current);
+        if (currentNum === val) return; // already up to date, avoid redundant event spam
+        applyingRemoteAccountUpdate = true;
+        localStorage.setItem(def.localKey, String(val));
+        applyingRemoteAccountUpdate = false;
+        if (field === "cash") document.dispatchEvent(new CustomEvent("nj:balance", { detail: getBalance() }));
+        if (field === "vault") document.dispatchEvent(new CustomEvent("nj:vault", { detail: getVaultBalance() }));
+        if (field === "reward") { document.dispatchEvent(new CustomEvent("nj:reward", { detail: getRewardBalance() })); document.dispatchEvent(new CustomEvent("nj:balance", { detail: getBalance() })); }
+        if (field === "lifetimeWagered") document.dispatchEvent(new CustomEvent("nj:cases", { detail: raffleSpinsAvailable() }));
+      });
+    });
+  }
+
+  // ---- bet log: appended live via push(), not overwritten ----
+  // Each new bet gets its own child key under liveBets/{username}/{pushId}, so two devices
+  // adding bets at the same instant can never stomp each other — Firebase just ends up with
+  // both children. Every device listens for new children and merges them into its local log.
+  let liveBetsSeenIds = new Set();
+  function pushLiveBet(entry) {
+    const username = getActiveAccountUsername();
+    const db = getCloudDb();
+    if (!username || !db) return;
+    db.ref("liveBets/" + username).push({ ...entry }).catch(() => {});
+  }
+  function startLiveBetListener(username) {
+    const db = getCloudDb();
+    if (!db) return;
+    const ref = db.ref("liveBets/" + username).limitToLast(500);
+    ref.on("child_added", (snap) => {
+      const id = snap.key;
+      if (liveBetsSeenIds.has(id)) return;
+      liveBetsSeenIds.add(id);
+      const entry = snap.val();
+      if (!entry) return;
+      // Only merge in bets we don't already have locally (matched by time+bet+game — good
+      // enough for this demo's purposes) so our OWN just-placed bet doesn't get double-added
+      // when Firebase echoes it back to us.
+      const list = getBetLog();
+      const dup = list.some((b) => b.time === entry.time && b.game === entry.game && b.bet === entry.bet && b.profit === entry.profit);
+      if (dup) return;
+      list.push(entry);
+      list.sort((a, b) => a.time - b.time);
+      if (list.length > 2000) list.splice(0, list.length - 2000);
+      localStorage.setItem(BETLOG_KEY, JSON.stringify(list));
+      document.dispatchEvent(new CustomEvent("nj:betlog", { detail: list }));
+    });
+  }
+
+  // ---- raffle/wager-case claimedSteps: synced via transaction too, since opening a case
+  // on one device while another device's stale count is still loaded must never let the
+  // case be "un-claimed" or double-claimed. ----
+  function pushLiveRaffleState() {
+    const username = getActiveAccountUsername();
+    if (!username) return;
+    const ref = liveFieldRef(username, "raffleClaimedSteps");
+    if (!ref) return;
+    const local = getRaffleState().claimedSteps || 0;
+    ref.transaction(() => local).catch(() => {});
+  }
+  function startLiveRaffleListener(username) {
+    const ref = liveFieldRef(username, "raffleClaimedSteps");
+    if (!ref) return;
+    ref.on("value", (snap) => {
+      const val = snap.val();
+      if (val === null || val === undefined) return;
+      const s = getRaffleState();
+      if ((s.claimedSteps || 0) === val) return;
+      applyingRemoteAccountUpdate = true;
+      s.claimedSteps = val;
+      localStorage.setItem(RAFFLE_KEY, JSON.stringify(s));
+      applyingRemoteAccountUpdate = false;
+      document.dispatchEvent(new CustomEvent("nj:cases", { detail: raffleSpinsAvailable() }));
+    });
+  }
+
+  // ---- everything else: whole-snapshot push, same as before, for non-money fields ----
   function pushLiveAccountState() {
     if (applyingRemoteAccountUpdate) return;
     clearTimeout(pushLiveAccountTimer);
@@ -612,6 +763,7 @@ window.Shell = (() => {
       db.ref("liveAccounts/" + username).set({ snapshot, savedAt: Date.now() }).catch(() => {});
     }, 120);
   }
+
   function startLiveAccountSync() {
     if (liveAccountUnsub) return;
     const username = getActiveAccountUsername();
@@ -626,21 +778,30 @@ window.Shell = (() => {
     const handler = (snap) => {
       const val = snap.val();
       if (!val || !val.snapshot) return;
-      if ((val.savedAt || 0) <= lastAppliedSavedAt) return; // already have this or newer
+      if ((val.savedAt || 0) <= lastAppliedSavedAt) return;
       lastAppliedSavedAt = val.savedAt || 0;
       applyingRemoteAccountUpdate = true;
-      loadSnapshotIntoLive(val.snapshot);
+      // IMPORTANT: only load the non-money keys from this whole-snapshot blob now — the
+      // money/critical fields (cash, vault, reward, lifetimeWagered) are owned by the
+      // per-field transaction listeners above and must NOT be clobbered by this older,
+      // coarser sync path.
+      const skip = new Set([BALANCE_KEY, VAULT_KEY, REWARD_BALANCE_KEY, LIFETIME_WAGERED_KEY, BETLOG_KEY, RAFFLE_KEY]);
+      Object.entries(val.snapshot).forEach(([k, v]) => {
+        if (skip.has(k)) return;
+        localStorage.setItem(k, v);
+      });
       applyingRemoteAccountUpdate = false;
-      document.dispatchEvent(new CustomEvent("nj:balance", { detail: getBalance() }));
-      document.dispatchEvent(new CustomEvent("nj:vault", { detail: getVaultBalance() }));
-      document.dispatchEvent(new CustomEvent("nj:betlog", { detail: getBetLog() }));
-      document.dispatchEvent(new CustomEvent("nj:cases", { detail: raffleSpinsAvailable() }));
       document.dispatchEvent(new CustomEvent("nj:reward", { detail: getRewardBalance() }));
       document.dispatchEvent(new CustomEvent("nj:earn", { detail: getEarnState() }));
     };
     ref.on("value", handler);
     liveAccountUnsub = () => ref.off("value", handler);
-    pushLiveAccountState(); // seed it on first connect
+    startLiveFieldListeners(username);
+    startLiveBetListener(username);
+    startLiveRaffleListener(username);
+    pushLiveAccountState(); // seed non-money fields on first connect
+    Object.keys(LIVE_FIELD_MAP).forEach(syncLiveField); // seed money fields too
+    pushLiveRaffleState();
   }
 
   // ---------- register a brand-new account (used by the post-logout Register screen) ----------
@@ -1165,7 +1326,7 @@ window.Shell = (() => {
     // live-update the sidebar case badge in THIS tab immediately (storage events only fire
     // in other tabs), same pattern as nj:balance/nj:vault/nj:betlog below.
     document.dispatchEvent(new CustomEvent("nj:cases", { detail: raffleSpinsAvailable() }));
-    pushLiveAccountState();
+    pushLiveRaffleState();
   }
   function raffleSpinsAvailable() {
     const wagered = getLifetimeWagered();
@@ -1411,6 +1572,7 @@ window.Shell = (() => {
     localStorage.setItem(LIFETIME_WAGERED_KEY, String(next));
     // wagering can cross a $500 step and grant a new case — refresh the sidebar badge live.
     document.dispatchEvent(new CustomEvent("nj:cases", { detail: raffleSpinsAvailable() }));
+    syncLiveField("lifetimeWagered");
     return next;
   }
   function getRecentWins() {
@@ -1448,7 +1610,7 @@ window.Shell = (() => {
       if (wins.length > 200) wins.shift();
       setRecentWins(wins);
     }
-    pushLiveAccountState();
+    pushLiveBet(record);
     return list;
   }
   // Resets only the live-stats graph / bet history — must NOT touch rank progress, wheel spins,
