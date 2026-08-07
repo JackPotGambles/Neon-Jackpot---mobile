@@ -100,7 +100,7 @@ window.Shell = (() => {
       const cloudSavedAt = cloudAcct.savedAt || 0;
 
       if (cloudSavedAt > localSavedAt) {
-        loadSnapshotIntoLive(cloudAcct.snapshot);
+        loadSnapshotIntoLiveExceptMoney(cloudAcct.snapshot);
         accts[username] = cloudAcct;
         setAccounts(accts);
         document.dispatchEvent(new CustomEvent("nj:balance", { detail: getBalance() }));
@@ -606,6 +606,15 @@ window.Shell = (() => {
     SYNC_KEYS.forEach((k) => localStorage.removeItem(k));
     Object.entries(snapshot || {}).forEach(([k, v]) => localStorage.setItem(k, v));
   }
+  // Same as above, but never touches balance/vault/reward/lifetimeWagered — those are owned
+  // exclusively by the real-time liveFields sync, which is always more accurate than a
+  // periodic snapshot. This is what stops a stale snapshot from ever rolling back real money.
+  function loadSnapshotIntoLiveExceptMoney(snapshot) {
+    SYNC_KEYS.forEach((k) => { if (!MONEY_LOCAL_KEYS.has(k)) localStorage.removeItem(k); });
+    Object.entries(snapshot || {}).forEach(([k, v]) => {
+      if (!MONEY_LOCAL_KEYS.has(k)) localStorage.setItem(k, v);
+    });
+  }
 
   // Saves the CURRENTLY active account's live state back into its registry entry, so nothing
   // played this session is lost. No-op if no account is currently active on this browser.
@@ -661,6 +670,8 @@ window.Shell = (() => {
     reward:          { get: getRewardBalance,          localKey: REWARD_BALANCE_KEY },
     lifetimeWagered: { get: getLifetimeWagered,         localKey: LIFETIME_WAGERED_KEY },
   };
+
+  const MONEY_LOCAL_KEYS = new Set(Object.values(LIVE_FIELD_MAP).map((f) => f.localKey));
 
   function liveFieldRef(username, field) {
     const db = getCloudDb();
@@ -837,7 +848,7 @@ window.Shell = (() => {
       // money/critical fields (cash, vault, reward, lifetimeWagered) are owned by the
       // per-field transaction listeners above and must NOT be clobbered by this older,
       // coarser sync path.
-      const skip = new Set([BALANCE_KEY, VAULT_KEY, REWARD_BALANCE_KEY, LIFETIME_WAGERED_KEY, BETLOG_KEY, RAFFLE_KEY]);
+      const skip = new Set([BALANCE_KEY, VAULT_KEY, REWARD_BALANCE_KEY, LIFETIME_WAGERED_KEY, MONEY_LOCAL_KEYS, BETLOG_KEY, RAFFLE_KEY]);
       Object.entries(val.snapshot).forEach(([k, v]) => {
         if (skip.has(k)) return;
         localStorage.setItem(k, v);
