@@ -701,7 +701,7 @@
               // Finished battles vanish 20 minutes after they finished (doneAt).
               if (b.status === "done") {
                 const doneAt = b.doneAt || b.createdAt || 0;
-                if (typeof doneAt === "number" && now - doneAt > 20 * 60 * 1000) return;
+                if (typeof doneAt === "number" && now - doneAt > 5 * 60 * 1000) return;
               } else {
                 // Waiting/live battles still get a generous 6hr cap so stale ones don't linger forever.
                 if (typeof b.createdAt === "number" && now - b.createdAt > 6 * 3600 * 1000 && b.status !== "live") return;
