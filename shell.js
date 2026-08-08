@@ -135,6 +135,7 @@ window.Shell = (() => {
         if (topEl) topEl.innerHTML = topbarHTML();
         if (sideEl) sideEl.innerHTML = sidebarHTML(document.querySelector(".rail-link.active")?.textContent?.trim() || "Lobby");
         bindChrome();
+        document.dispatchEvent(new CustomEvent("nj:chrome-repainted"));
       });
     });
   }
