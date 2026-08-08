@@ -505,7 +505,7 @@ window.Shell = (() => {
   const SYNC_KEYS = [
     BALANCE_KEY, VAULT_KEY, EARN_KEY, NOTIF_KEY, RECENT_SEARCH_KEY,
     PLAYER_KEY, CLAIM_KEY, CLAIM_TOTALS_KEY, BOOST_KEY, RAFFLE_KEY,
-    LIFETIME_WAGERED_KEY, RAKEBACK_KEY, FAVORITES_KEY, SIDEBAR_COLLAPSE_KEY, AVATAR_IMAGE_KEY,
+    LIFETIME_WAGERED_KEY, RAKEBACK_KEY, FAVORITES_KEY, SIDEBAR_COLLAPSE_KEY,
     DEV_KEY, DEV_ENABLED_KEY, DEV_SNAPSHOT_KEY,
     REWARD_BALANCE_KEY, ACTIVE_CURRENCY_KEY, REWARD_LOCK_KEY, CASE_UPGRADE_KEY,
     RECENT_WINS_KEY, RAIL_DROPDOWN_KEY,
@@ -823,7 +823,7 @@ window.Shell = (() => {
       }).then((result) => {
         if (result.committed) liveAccountGen = myGen;
       }).catch(() => {});
-    }, 120);
+    }, 5000);
   }
 
   function startLiveAccountSync() {
