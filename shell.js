@@ -505,7 +505,7 @@ window.Shell = (() => {
   const SYNC_KEYS = [
     BALANCE_KEY, VAULT_KEY, EARN_KEY, NOTIF_KEY, RECENT_SEARCH_KEY,
     PLAYER_KEY, CLAIM_KEY, CLAIM_TOTALS_KEY, BOOST_KEY, RAFFLE_KEY,
-    LIFETIME_WAGERED_KEY, RAKEBACK_KEY, FAVORITES_KEY, SIDEBAR_COLLAPSE_KEY, AVATAR_IMAGE_KEY,
+    LIFETIME_WAGERED_KEY, RAKEBACK_KEY, FAVORITES_KEY, SIDEBAR_COLLAPSE_KEY,
     DEV_KEY, DEV_ENABLED_KEY, DEV_SNAPSHOT_KEY,
     REWARD_BALANCE_KEY, ACTIVE_CURRENCY_KEY, REWARD_LOCK_KEY, CASE_UPGRADE_KEY,
     RECENT_WINS_KEY, RAIL_DROPDOWN_KEY,
@@ -662,6 +662,7 @@ window.Shell = (() => {
   let liveAccountRetryTimer = null;
   let applyingRemoteAccountUpdate = false; // guards against re-pushing what we just received
   let pushLiveAccountTimer = null;
+  let lastForcedPushAt = 0;
 
   // Fields this device writes via transaction() rather than the whole-blob push.
   const LIVE_FIELD_MAP = {
@@ -801,29 +802,30 @@ window.Shell = (() => {
   let liveAccountGen = 0;
   let liveAccountPullInFlight = false;
 
+  function pushLiveAccountStateNow() {
+    if (applyingRemoteAccountUpdate) return;
+    if (liveAccountPullInFlight) return;
+    const username = getActiveAccountUsername();
+    const db = getCloudDb();
+    if (!username || !db) return;
+    const snapshot = snapshotCurrentState();
+    const myGen = Date.now();
+    const ref = db.ref("liveAccounts/" + username);
+    ref.transaction((current) => {
+      if (current && current.savedAt && current.savedAt > liveAccountGen) {
+        return; // abort — server has something newer than what we're aware of
+      }
+      return { snapshot, savedAt: myGen };
+    }).then((result) => {
+      if (result.committed) liveAccountGen = myGen;
+    }).catch(() => {});
+  }
+
   function pushLiveAccountState() {
     if (applyingRemoteAccountUpdate) return;
-    if (liveAccountPullInFlight) return; // NEVER push while a pull is still resolving
+    if (liveAccountPullInFlight) return;
     clearTimeout(pushLiveAccountTimer);
-    pushLiveAccountTimer = setTimeout(() => {
-      if (liveAccountPullInFlight) return; // re-check after the debounce delay too
-      const username = getActiveAccountUsername();
-      const db = getCloudDb();
-      if (!username || !db) return;
-      const snapshot = snapshotCurrentState();
-      const myGen = Date.now();
-      const ref = db.ref("liveAccounts/" + username);
-      // Transaction instead of a blind .set() — refuses to write if the server's
-      // savedAt is already newer than what we saw last (someone else wrote first).
-      ref.transaction((current) => {
-        if (current && current.savedAt && current.savedAt > liveAccountGen) {
-          return; // abort — server has something newer than what we're aware of
-        }
-        return { snapshot, savedAt: myGen };
-      }).then((result) => {
-        if (result.committed) liveAccountGen = myGen;
-      }).catch(() => {});
-    }, 120);
+    pushLiveAccountTimer = setTimeout(pushLiveAccountStateNow, 120);
   }
 
   function startLiveAccountSync() {
@@ -2005,6 +2007,14 @@ window.Shell = (() => {
     addCashBalance(-cost);
     state.levels[id] = (state.levels[id] || 0) + 1;
     setEarnState(state);
+    if (Date.now() - lastForcedPushAt > 800) {
+      lastForcedPushAt = Date.now();
+      persistActiveAccount();
+      pushLiveAccountStateNow();
+    } else {
+      persistActiveAccount();
+      pushLiveAccountState(); // falls back to the debounced version
+    }
     return true;
   }
   function earnClaimPassive() {
@@ -2015,6 +2025,14 @@ window.Shell = (() => {
     state.totalClaimed = (state.totalClaimed || 0) + amount;
     addCashBalance(amount);
     setEarnState(state);
+    if (Date.now() - lastForcedPushAt > 800) {
+      lastForcedPushAt = Date.now();
+      persistActiveAccount();
+      pushLiveAccountStateNow();
+    } else {
+      persistActiveAccount();
+      pushLiveAccountState(); // falls back to the debounced version
+    }
     return amount;
   }
 
