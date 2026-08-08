@@ -727,8 +727,8 @@ html.nj-no-animations *::after {
 /* toggle button in the topbar action cluster */
 .chat-toggle-btn { position: relative; }
 .chat-toggle-btn.active { color: var(--mint); background: rgba(92,255,231,.12); }
-.chat-unread-dot { position: absolute; top: 5px; right: 5px; width: 9px; height: 9px; background: #ff3b3b; border: 2px solid var(--bg); border-radius: 50%; box-shadow: 0 0 6px rgba(255,59,59,.8); animation: chat-unread-pulse 1s ease-in-out infinite; }
-@keyframes chat-unread-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.25); } }
+.chat-unread-dot { position: absolute; top: 3px; right: 3px; width: 13px; height: 13px; background: #ff3b3b; border: 2px solid var(--bg); border-radius: 50%; box-shadow: 0 0 10px rgba(255,59,59,1), 0 0 3px rgba(255,59,59,1); animation: chat-unread-pulse 1s ease-in-out infinite; z-index: 5; }
+@keyframes chat-unread-pulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 10px rgba(255,59,59,1), 0 0 3px rgba(255,59,59,1); } 50% { transform: scale(1.45); box-shadow: 0 0 16px rgba(255,59,59,1), 0 0 6px rgba(255,59,59,1); } }
 
 /* slide-out panel, anchored top-right, same slide affordance as the left sidebar collapse */
 .chat-panel {
