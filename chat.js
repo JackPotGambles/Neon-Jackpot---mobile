@@ -36,8 +36,8 @@ window.Chat = (() => {
 
   const CHAT_PANEL_OPEN_KEY = "nj_chat_panel_open";
   const CHAT_NAME_COLOR_KEY = "nj_chat_color"; // reuse the player's own avatar color for their chat name
-  const PRESENCE_STALE_MS = 45000; // consider someone "offline" if their heartbeat is older than this
-  const HEARTBEAT_MS = 20000;
+  const PRESENCE_STALE_MS = 90000; // consider someone "offline" if their heartbeat is older than this
+  const HEARTBEAT_MS = 45000;
   const MAX_MESSAGES = 40; // trim how many messages we keep/display
 
   // Local ledger of direct-gift IDs this save has already credited, so a reconnect / duplicate
@@ -186,7 +186,7 @@ window.Chat = (() => {
 
   function startChatSync() {
     if (!ready) return;
-    const chatRef = db.ref("chat").limitToLast(100);
+    const chatRef = db.ref("chat").limitToLast(40);
     unsubscribeChat = chatRef.on("value", (snap) => {
       const val = snap.val() || {};
       messages = Object.entries(val)
