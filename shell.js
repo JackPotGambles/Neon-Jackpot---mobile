@@ -1044,6 +1044,8 @@ window.Shell = (() => {
     const totals = getClaimTotals();
     totals[key] = (totals[key] || 0) + amount;
     localStorage.setItem(CLAIM_TOTALS_KEY, JSON.stringify(totals));
+    persistActiveAccount();
+    pushLiveAccountStateNow();
     return amount;
   }
   function getClaimTotals() {
@@ -1076,6 +1078,8 @@ window.Shell = (() => {
     const totals = getClaimTotals();
     totals.rakeback = (totals.rakeback || 0) + amount;
     localStorage.setItem(CLAIM_TOTALS_KEY, JSON.stringify(totals));
+    persistActiveAccount();
+    pushLiveAccountStateNow();
     return amount;
   }
   function fmtCountdown(ms) {
