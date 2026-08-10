@@ -673,6 +673,8 @@ window.Shell = (() => {
     vault:           { get: getVaultBalance,           localKey: VAULT_KEY },
     reward:          { get: getRewardBalance,          localKey: REWARD_BALANCE_KEY },
     lifetimeWagered: { get: getLifetimeWagered,         localKey: LIFETIME_WAGERED_KEY },
+    legendaryCases:  { get: getLegendaryCasesOwned,     localKey: LEGENDARY_CASE_OWNED_KEY },
+    exoticCases:     { get: getExoticCasesOwned,        localKey: EXOTIC_CASE_OWNED_KEY },
   };
 
   const MONEY_LOCAL_KEYS = new Set(Object.values(LIVE_FIELD_MAP).map((f) => f.localKey));
@@ -731,6 +733,8 @@ window.Shell = (() => {
         if (field === "vault") document.dispatchEvent(new CustomEvent("nj:vault", { detail: getVaultBalance() }));
         if (field === "reward") { document.dispatchEvent(new CustomEvent("nj:reward", { detail: getRewardBalance() })); document.dispatchEvent(new CustomEvent("nj:balance", { detail: getBalance() })); }
         if (field === "lifetimeWagered") document.dispatchEvent(new CustomEvent("nj:cases", { detail: raffleSpinsAvailable() }));
+        if (field === "legendaryCases") document.dispatchEvent(new CustomEvent("nj:legendarycases", { detail: getLegendaryCasesOwned() }));
+        if (field === "exoticCases") document.dispatchEvent(new CustomEvent("nj:exoticcases", { detail: getExoticCasesOwned() }));
       });
     });
   }
@@ -1440,6 +1444,7 @@ window.Shell = (() => {
   function setLegendaryCasesOwned(n) {
     localStorage.setItem(LEGENDARY_CASE_OWNED_KEY, String(Math.max(0, n)));
     document.dispatchEvent(new CustomEvent("nj:legendarycases", { detail: getLegendaryCasesOwned() }));
+    syncLiveField("legendaryCases");
   }
   function getExoticCasesOwned() {
     const n = parseInt(localStorage.getItem(EXOTIC_CASE_OWNED_KEY), 10);
@@ -1448,6 +1453,7 @@ window.Shell = (() => {
   function setExoticCasesOwned(n) {
     localStorage.setItem(EXOTIC_CASE_OWNED_KEY, String(Math.max(0, n)));
     document.dispatchEvent(new CustomEvent("nj:exoticcases", { detail: getExoticCasesOwned() }));
+    syncLiveField("exoticCases");
   }
 
   // Converts LEGENDARY_CASE_COST regular wager cases into 1 Legendary case. Returns true/false.
@@ -1906,7 +1912,7 @@ window.Shell = (() => {
     const list = getBetLog();
     const record = { time: Date.now(), ...entry };
     list.push(record);
-    if (list.length > 20) list.shift();
+    if (list.length > 5000) list.shift();
     setBetLog(list);
     addLifetimeWagered(entry.bet || 0);
     accrueRakeback(entry.bet || 0);
@@ -3015,6 +3021,8 @@ window.Shell = (() => {
     if (enabledToggle) enabledToggle.onchange = () => {
       const on = setDeveloperEnabled(enabledToggle.checked);
       notify(on ? "Developer tools enabled." : "Developer tools disabled.");
+      persistActiveAccount();
+      pushLiveAccountStateNow();
       renderDevFloatingPanel();
       rerender();
     };
@@ -4403,8 +4411,10 @@ window.Shell = (() => {
   function chartSvgHTML(betLog) {
     let running = 0;
     const series = betLog.length ? [0, ...betLog.map((b) => (running += b.profit))] : [0, 0];
-    const maxAbs = Math.max(20, ...series.map((v) => Math.abs(v)));
-    const top = 4, bottom = 96, mid = (top + bottom) / 2; // mid = the $0 baseline, symmetric scale so it always fits
+    // pad maxAbs by 15% so peaks never sit exactly on the edge of the viewBox (which was
+    // clipping/hiding the top or bottom of the line)
+    const maxAbs = Math.max(20, ...series.map((v) => Math.abs(v))) * 1.15;
+    const top = 8, bottom = 92, mid = (top + bottom) / 2;
     const yFor = (v) => mid - clampNum(v / maxAbs, -1, 1) * (mid - top);
     const points = series.map((value, index) => ({
       value,
@@ -4413,8 +4423,6 @@ window.Shell = (() => {
     }));
     const zeroY = mid;
 
-    // Build segments split at every zero-crossing so each polygon/polyline piece is purely
-    // above (profit/green) or below (loss/red) the baseline.
     const upSegs = [], downSegs = [];
     let cur = [points[0]];
     let curSign = points[0].value >= 0 ? "up" : "down";
@@ -4422,7 +4430,6 @@ window.Shell = (() => {
       const prev = points[i - 1], p = points[i];
       const sign = p.value >= 0 ? "up" : "down";
       if (sign !== curSign && prev.value !== 0) {
-        // interpolate the zero-crossing point
         const t = prev.value / (prev.value - p.value);
         const xi = prev.x + t * (p.x - prev.x);
         cur.push({ x: xi, y: zeroY, value: 0 });
@@ -4434,16 +4441,33 @@ window.Shell = (() => {
     }
     (curSign === "up" ? upSegs : downSegs).push(cur);
 
-    const toLine = (seg) => seg.map((p) => `${p.x},${p.y}`).join(" ");
-    const toArea = (seg) => `${seg[0].x},${zeroY} ${toLine(seg)} ${seg[seg.length - 1].x},${zeroY}`;
+    // Smooth curve: quadratic Bezier through the midpoint of each pair of points, same
+    // technique used for crash.html's curve — removes the sharp straight-line-segment look.
+    function smoothPath(seg) {
+      if (seg.length < 2) return `M ${seg[0].x},${seg[0].y}`;
+      let d = `M ${seg[0].x},${seg[0].y}`;
+      for (let i = 1; i < seg.length - 1; i++) {
+        const cx = seg[i].x, cy = seg[i].y;
+        const nx = (seg[i].x + seg[i + 1].x) / 2;
+        const ny = (seg[i].y + seg[i + 1].y) / 2;
+        d += ` Q ${cx},${cy} ${nx},${ny}`;
+      }
+      const last = seg[seg.length - 1];
+      d += ` L ${last.x},${last.y}`;
+      return d;
+    }
+    function smoothArea(seg) {
+      const first = seg[0], last = seg[seg.length - 1];
+      return `${smoothPath(seg)} L ${last.x},${zeroY} L ${first.x},${zeroY} Z`;
+    }
 
     const areas = [
-      ...upSegs.map((seg) => `<polygon class="stats-area-up" points="${toArea(seg)}"/>`),
-      ...downSegs.map((seg) => `<polygon class="stats-area-down" points="${toArea(seg)}"/>`),
+      ...upSegs.map((seg) => `<path class="stats-area-up" d="${smoothArea(seg)}"/>`),
+      ...downSegs.map((seg) => `<path class="stats-area-down" d="${smoothArea(seg)}"/>`),
     ].join("");
     const lines = [
-      ...upSegs.map((seg) => `<polyline class="stats-line-up" points="${toLine(seg)}"/>`),
-      ...downSegs.map((seg) => `<polyline class="stats-line-down" points="${toLine(seg)}"/>`),
+      ...upSegs.map((seg) => `<path class="stats-line-up" d="${smoothPath(seg)}"/>`),
+      ...downSegs.map((seg) => `<path class="stats-line-down" d="${smoothPath(seg)}"/>`),
     ].join("");
 
     return {

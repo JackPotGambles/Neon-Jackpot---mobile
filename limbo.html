@@ -84,10 +84,10 @@
       .game-box::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5; background-image: radial-gradient(circle, rgba(255,255,255,.4) .6px, transparent .6px); background-size: 26px 26px; mask-image: radial-gradient(circle at 50% 30%, black, transparent 70%); }
 
       .recent-row { position: relative; z-index: 1; display: flex; justify-content: flex-end; gap: 6px; min-height: 24px; }
-      .recent-chip { padding: 5px 9px; color: #aeb8ca; background: #161a29; border: 1px solid var(--line); border-radius: 7px; font-family: var(--mono); font-size: 10px; font-weight: 600; opacity: 0; transform: translateY(-4px); animation: chip-in .25s ease forwards; }
+      .recent-chip { padding: 5px 9px; color: #aeb8ca; background: #161a29; border: 1px solid var(--line); border-radius: 7px; font-family: var(--mono); font-size: 10px; font-weight: 600; }
       .recent-chip.win { color: #04140f; background: var(--mint); border-color: transparent; }
-      @keyframes chip-in { to { opacity: 1; transform: translateY(0); } }
-
+      .recent-chip.new { animation: chip-in .25s ease; }
+      @keyframes chip-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
       .stage { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
       .demo-bubble { display: flex; align-items: center; gap: 6px; padding: 6px 12px; color: #cfe1ff; background: #171c30; border: 1px solid rgba(58,160,255,.35); border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 8px 20px rgba(0,0,0,.3); }
       .demo-bubble.win-preview { color: var(--mint); border-color: rgba(92,255,231,.4); }
@@ -244,6 +244,7 @@
           armed: false, // shrink animation while waiting to roll
           result: null, // { multiplier, win }
           history: [], // cumulative running profit points (legacy, kept for compatibility)
+          recentJustAdded: false,
           statsGame: "all", // "all" or a specific game id — filters by game actually played
           statsGameDropdownOpen: false,
           statsDrag: null, // { offsetX, offsetY } while dragging the panel
@@ -417,7 +418,7 @@
           const statsPlayedGames = playedGamesList();
           const statsCurrentLabel = state.statsGame === "all" ? "All" : (gameNames[state.statsGame] || state.statsGame);
 
-          const recentChips = state.recent.slice(-5).reverse().map((r) => `<span class="recent-chip ${r.win ? "win" : ""}">${r.value.toFixed(2)}x</span>`).join("");
+          const recentChips = state.recent.slice(-5).reverse().map((r, i) => `<span class="recent-chip ${r.win ? "win" : ""} ${i === 0 && state.recentJustAdded ? "new" : ""}">${r.value.toFixed(2)}x</span>`).join("");
 
           const auto = state.auto;
           const betsRemainingDisplay = auto.betsRemaining === null ? "" : String(auto.betsRemaining);
@@ -685,7 +686,9 @@
             state.result = { multiplier: displayMultiplier, target: targetMultiplier, win };
             state.recent.push({ value: displayMultiplier, win });
             if (state.recent.length > 20) state.recent.shift();
+            state.recentJustAdded = true;
             render();
+            state.recentJustAdded = false;
             if (onDone) onDone();
           }
         }
@@ -696,10 +699,13 @@
           const r = Math.random();
           let crashMultiplier = RTP / Math.max(1e-9, 1 - r);
           crashMultiplier = clamp(crashMultiplier, 1, MAX_MULTIPLIER * 10); // let it visually run past MAX_MULTIPLIER a bit before clamping
-          const won = crashMultiplier >= multiplierTarget;
-          // The number that actually climbs on screen is the real crash point (can overshoot the
-          // target you set — that's just visual). The payout always uses your target, never the crash value.
-          const displayMultiplier = clamp(crashMultiplier, 1, MAX_MULTIPLIER);
+          // Round the multiplier DOWN to 2 decimals FIRST — this is what actually gets shown on
+          // screen (via toFixed(2)/floor elsewhere) — then decide win/loss off that same rounded
+          // number. Deciding win/loss off the raw unrounded number let you see "9.00x" displayed
+          // (rounded up from something like 8.996) while actually losing, since 8.996 < 9.
+          let displayMultiplier = clamp(crashMultiplier, 1, MAX_MULTIPLIER);
+          displayMultiplier = Math.floor(displayMultiplier * 100) / 100;
+          const won = displayMultiplier >= multiplierTarget;
           return { won, displayMultiplier };
         }
 

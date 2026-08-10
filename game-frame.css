@@ -98,9 +98,10 @@
 .game-box { grid-row: 2; grid-column: 2; position: relative; display: flex; flex-direction: column; padding: 20px; min-height: 460px; background: #0b0d17; }
 .game-box::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5; background-image: radial-gradient(circle, rgba(255,255,255,.4) .6px, transparent .6px); background-size: 26px 26px; mask-image: radial-gradient(circle at 50% 30%, black, transparent 70%); }
 .recent-row { position: relative; z-index: 1; display: flex; justify-content: flex-end; gap: 6px; min-height: 24px; }
-.recent-chip { padding: 5px 9px; color: #aeb8ca; background: #161a29; border: 1px solid var(--line); border-radius: 7px; font-family: var(--mono); font-size: 10px; font-weight: 600; opacity: 0; transform: translateY(-4px); animation: chip-in .25s ease forwards; }
+.recent-chip { padding: 5px 9px; color: #aeb8ca; background: #161a29; border: 1px solid var(--line); border-radius: 7px; font-family: var(--mono); font-size: 10px; font-weight: 600; }
 .recent-chip.win { color: #04140f; background: var(--mint); border-color: transparent; }
-@keyframes chip-in { to { opacity: 1; transform: translateY(0); } }
+.recent-chip.new { animation: chip-in .25s ease; }
+@keyframes chip-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 .stage { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
 .demo-bubble { display: flex; align-items: center; gap: 6px; padding: 6px 12px; color: #cfe1ff; background: #171c30; border: 1px solid rgba(58,160,255,.35); border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 8px 20px rgba(0,0,0,.3); }
 
