@@ -35,6 +35,11 @@ window.Chat = (() => {
   };
 
   const CHAT_PANEL_OPEN_KEY = "nj_chat_panel_open";
+  const LAST_SEEN_MSG_KEY = "nj_chat_last_seen_msg";
+  const CHAT_PANEL_POS_KEY = "nj_chat_panel_pos";   // { left, top }
+  const CHAT_PANEL_SIZE_KEY = "nj_chat_panel_size"; // { width, height }
+  const CHAT_TEXT_SIZE_KEY = "nj_chat_text_size";   // 0-3, index into CHAT_TEXT_SIZES
+  const CHAT_TEXT_SIZES = ["12px", "13.5px", "15px", "17px"];
   const CHAT_NAME_COLOR_KEY = "nj_chat_color"; // reuse the player's own avatar color for their chat name
   const PRESENCE_STALE_MS = 90000; // consider someone "offline" if their heartbeat is older than this
   const HEARTBEAT_MS = 45000;
@@ -71,6 +76,7 @@ window.Chat = (() => {
   let messages = [];
   let presenceMap = {}; // playerId -> { name, color, lastSeen, rankLabel, rankTrack, wagered }
   let panelBound = false;
+  let panelPoppedOut = false;
   let profileClicksBound = false;
   let unsubscribeDirectGifts = null;
 
@@ -104,6 +110,9 @@ window.Chat = (() => {
   // ---------------------------------------------------------------------
   function isPanelOpen() { return localStorage.getItem(CHAT_PANEL_OPEN_KEY) === "1"; }
   function setPanelOpen(open) { localStorage.setItem(CHAT_PANEL_OPEN_KEY, open ? "1" : "0"); }
+  const CHAT_PANEL_POPPED_KEY = "nj_chat_panel_popped";
+  function isPanelPoppedOut() { return localStorage.getItem(CHAT_PANEL_POPPED_KEY) === "1"; }
+  function setPanelPoppedOut(v) { localStorage.setItem(CHAT_PANEL_POPPED_KEY, v ? "1" : "0"); }
 
   function myChatColor() {
     let c = localStorage.getItem(CHAT_NAME_COLOR_KEY);
@@ -201,6 +210,7 @@ window.Chat = (() => {
       }
       if (newest) lastSeenMsgKey = newest.msgKey;
       chatSyncPrimed = true;
+      localStorage.setItem(LAST_SEEN_MSG_KEY, lastSeenMsgKey || "");
 
       renderMessages();
     });
@@ -262,6 +272,27 @@ window.Chat = (() => {
     }
   }
 
+  // ---------------------------------------------------------------------
+  // SLASH-COMMAND GHOST TEXT — developer-only autocomplete hint shown
+  // behind what's typed, e.g. typing "/cl" shows "/clear" ghosted in.
+  // Never shown to non-developers, even if they happen to type "/".
+  // ---------------------------------------------------------------------
+  const DEV_COMMANDS = ["/clear", "/clearchat", "/kick", "/announce"];
+  function suggestCommand(typed) {
+    if (!typed.startsWith("/") || typed.length < 1) return "";
+    const match = DEV_COMMANDS.find((c) => c.startsWith(typed.toLowerCase()));
+    return match || "";
+  }
+  function updateGhostText(inputVal) {
+    const ghostEl = document.querySelector("[data-chat-input-ghost]");
+    if (!ghostEl) return;
+    if (!Shell.isDeveloper() || !inputVal) { ghostEl.textContent = ""; return; }
+    const suggestion = suggestCommand(inputVal);
+    if (!suggestion || suggestion === inputVal.toLowerCase()) { ghostEl.textContent = ""; return; }
+    // Render the typed part invisibly (so spacing lines up) then the remainder ghosted.
+    ghostEl.innerHTML = `<span style="visibility:hidden;">${escapeHTML(inputVal)}</span><span class="chat-ghost-suffix">${escapeHTML(suggestion.slice(inputVal.length))}</span>`;
+  }
+
   function sendMessage(text) {
     const clean = (text || "").trim();
     if (!clean || !ready) return;
@@ -281,19 +312,64 @@ window.Chat = (() => {
   // placed in the topbar's action cluster (next to the other icon boxes),
   // mirroring the sidebar's expand/collapse affordance on the left.
   // ---------------------------------------------------------------------
+  function getPanelPos() {
+    try { return JSON.parse(localStorage.getItem(CHAT_PANEL_POS_KEY)) || null; } catch { return null; }
+  }
+  function setPanelPos(pos) { localStorage.setItem(CHAT_PANEL_POS_KEY, JSON.stringify(pos)); }
+  function getPanelSize() {
+    try { return JSON.parse(localStorage.getItem(CHAT_PANEL_SIZE_KEY)) || null; } catch { return null; }
+  }
+  function setPanelSize(size) { localStorage.setItem(CHAT_PANEL_SIZE_KEY, JSON.stringify(size)); }
+
+  function getChatTextSizeIndex() {
+    const v = parseInt(localStorage.getItem(CHAT_TEXT_SIZE_KEY), 10);
+    return (v >= 0 && v <= 3) ? v : 1; // default = index 1 (13.5px, close to current default)
+  }
+  function setChatTextSizeIndex(i) {
+    localStorage.setItem(CHAT_TEXT_SIZE_KEY, String(i));
+    applyChatTextSize();
+  }
+  function applyChatTextSize() {
+    const size = CHAT_TEXT_SIZES[getChatTextSizeIndex()];
+    document.querySelectorAll(".chat-messages").forEach((el) => el.style.setProperty("--chat-text-size", size));
+  }
+
   function panelHTML() {
     const open = isPanelOpen();
-    return `<aside class="chat-panel ${open ? "open" : ""}" data-chat-panel>
-      <div class="chat-panel-head">
+    const popped = isPanelPoppedOut();
+    const pos = popped ? getPanelPos() : null;
+    const size = popped ? getPanelSize() : null;
+    let posStyle = "";
+    if (popped) {
+      if (pos) {
+        posStyle = `left:${pos.left}px; top:${pos.top}px; right:auto;`;
+      } else {
+        const left = Math.max(20, Math.round(window.innerWidth / 2 - 170));
+        const top = Math.max(20, Math.round(window.innerHeight / 2 - 260));
+        posStyle = `left:${left}px; top:${top}px; right:auto;`;
+      }
+    }
+    const sizeStyle = popped && size ? `width:${size.width}px; height:${size.height}px;` : "";
+    return `<aside class="chat-panel ${open ? "open" : ""} ${popped ? "popped-out" : ""}" data-chat-panel style="${posStyle}${sizeStyle}">
+      <div class="chat-panel-head" data-chat-drag-handle>
         <span class="chat-panel-title">${Shell.svg("sparkles")} Friends Chat</span>
         <button class="chat-panel-close hover-tip" data-hover-tip="Close chat" data-chat-close aria-label="Close chat">${Shell.svg("x")}</button>
       </div>
       <div class="chat-online-row" data-chat-online></div>
       <div class="chat-messages" data-chat-messages></div>
+      <div class="chat-toolbar-row">
+        <button class="chat-toolbar-btn hover-tip" data-hover-tip="Chat settings" data-chat-settings-btn aria-label="Chat settings">${Shell.svg("settings")}</button>
+        <button class="chat-toolbar-btn hover-tip" data-hover-tip="Customize your rank icon" data-chat-customize-btn aria-label="Customize rank icon">${Shell.svg("edit")}</button>
+        <button class="chat-toolbar-btn hover-tip" data-hover-tip="${popped ? "Dock chat" : "Popout chat"}" data-chat-popout aria-label="Popout chat">${Shell.svg("grid")}</button>
+      </div>
       <div class="chat-input-row">
-        <input type="text" maxlength="500" placeholder="${isConfigured() ? "Message your friends…" : "Chat isn't set up yet — add your Firebase config"}" data-chat-input ${isConfigured() ? "" : "disabled"}>
+        <div class="chat-input-ghost-wrap">
+          <div class="chat-input-ghost" data-chat-input-ghost></div>
+          <input type="text" maxlength="500" placeholder="${isConfigured() ? "Message your friends…" : "Chat isn't set up yet — add your Firebase config"}" data-chat-input ${isConfigured() ? "" : "disabled"}>
+        </div>
         <button class="chat-send-btn" data-chat-send ${isConfigured() ? "" : "disabled"} aria-label="Send">${Shell.svg("bolt")}</button>
       </div>
+      <div class="chat-resize-handle" data-chat-resize-handle></div>
     </aside>`;
   }
 
@@ -349,12 +425,23 @@ window.Chat = (() => {
     if (m.id) {
       if (m.id === Shell.getPlayerProfile().id) {
         const me = Shell.getPlayerProfile();
-        return { name: me.name, color: me.avatarColor || myChatColor() };
+        const myRank = Shell.rankStats();
+        const override = getChatIconOverride();
+        const rankTrack = override === "none" ? null : (override || myRank.track);
+        return { name: me.name, color: me.avatarColor || myChatColor(), rankTrack };
       }
       const p = presenceMap[m.id];
-      if (p && p.name) return { name: p.name, color: p.color || "#5cffe7" };
+      if (p && p.name) return { name: p.name, color: p.color || "#5cffe7", rankTrack: p.rankTrack };
     }
-    return { name: m.name || "Player", color: m.color || "#5cffe7" };
+    return { name: m.name || "Player", color: m.color || "#5cffe7", rankTrack: null };
+  }
+
+  // Small diamond icon colored per rank track, shown to the left of a name in chat.
+  // "Unranked" (or missing track) renders nothing.
+  function rankIconHTML(track) {
+    if (!track || track === "Unranked") return "";
+    const c = Shell.rankColorFor(track).color;
+    return `<span class="chat-rank-icon" style="color:${c};" title="${track}">${Shell.svg("safe")}</span>`;
   }
 
 
@@ -366,9 +453,12 @@ window.Chat = (() => {
 
     box.innerHTML = messages.length
       ? messages.map((m) => {
+          if (m.giftEvent) {
+            return `<div class="chat-gift-announce">${Shell.svg("gift")} <strong>${escapeHTML(m.giftEvent.senderName)}</strong> has gifted <strong>${escapeHTML(m.giftEvent.recipientName)}</strong> ${Shell.fmtMoney(m.giftEvent.amount)}!</div>`;
+          }
           const live = liveNameAndColor(m);
           return `<div class="chat-msg">
-          <span class="chat-msg-name${m.id ? " hover-tip" : ""}" ${m.id ? `data-hover-tip="View profile" data-profile-id="${escapeHTML(m.id)}"` : ""} style="color:${live.color};${m.id ? "cursor:pointer;" : ""}">${escapeHTML(live.name)}</span>
+          ${rankIconHTML(live.rankTrack)}<span class="chat-msg-name${m.id ? " hover-tip" : ""}" ${m.id ? `data-hover-tip="View profile" data-profile-id="${escapeHTML(m.id)}"` : ""} style="color:${live.color};${m.id ? "cursor:pointer;" : ""}">${escapeHTML(live.name)}</span>
           <span class="chat-msg-time">${fmtTime(m.time)}</span>
           <div class="chat-msg-text">${escapeHTML(m.text)}</div>
         </div>`;
@@ -377,10 +467,13 @@ window.Chat = (() => {
 
     if (atBottom) box.scrollTop = box.scrollHeight;
 
-    // unread dot: only show when the panel is closed and the newest message isn't from me
+    // unread dot: only show when the panel is closed, the newest message isn't from me,
+    // AND we haven't already marked that exact message as seen (persisted across reloads)
     const last = messages[messages.length - 1];
+    const seenKey = localStorage.getItem(LAST_SEEN_MSG_KEY) || "";
     const dot = document.querySelector("[data-chat-unread-dot]");
-    if (dot) dot.style.display = (!isPanelOpen() && last && last.id !== Shell.getPlayerProfile().id) ? "block" : "none";
+    const isUnread = !!(last && last.id !== Shell.getPlayerProfile().id && last.msgKey !== seenKey);
+    if (dot) dot.style.display = (!isPanelOpen() && isUnread) ? "block" : "none";
   }
 
   function renderPresenceList() {
@@ -399,6 +492,8 @@ window.Chat = (() => {
     document.querySelector("[data-chat-toggle]")?.classList.add("active");
     const dot = document.querySelector("[data-chat-unread-dot]");
     if (dot) dot.style.display = "none";
+    const last = messages[messages.length - 1];
+    if (last) localStorage.setItem(LAST_SEEN_MSG_KEY, last.msgKey);
     document.querySelector("[data-chat-input]")?.focus();
   }
   function closePanel() {
@@ -414,16 +509,225 @@ window.Chat = (() => {
       isPanelOpen() ? closePanel() : openPanel();
     };
     document.querySelector("[data-chat-close]")?.addEventListener("click", closePanel);
+    const popoutBtn = document.querySelector("[data-chat-popout]");
+    if (popoutBtn) {
+      const freshPopoutBtn = popoutBtn.cloneNode(true);
+      popoutBtn.replaceWith(freshPopoutBtn);
+      freshPopoutBtn.addEventListener("click", () => {
+        setPanelPoppedOut(!isPanelPoppedOut());
+        const panel = document.querySelector("[data-chat-panel]");
+        if (panel) {
+          const wasOpen = isPanelOpen();
+          panel.outerHTML = panelHTML();
+          if (wasOpen) document.querySelector("[data-chat-panel]")?.classList.add("open");
+          bindPanel();
+          renderMessages();
+          renderPresenceList();
+        }
+      });
+    }
 
     const input = document.querySelector("[data-chat-input]");
     const send = () => {
       if (!input) return;
       sendMessage(input.value);
       input.value = "";
+      updateGhostText("");
       input.focus();
     };
     document.querySelector("[data-chat-send]")?.addEventListener("click", send);
-    input?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } });
+    input?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); send(); return; }
+      // Tab autocompletes the ghosted suggestion, same convention as most command-line UIs.
+      if (e.key === "Tab" && Shell.isDeveloper()) {
+        const suggestion = suggestCommand(input.value);
+        if (suggestion) { e.preventDefault(); input.value = suggestion + " "; updateGhostText(input.value); }
+      }
+    });
+    input?.addEventListener("input", (e) => updateGhostText(e.target.value));
+
+    bindPanelDragAndResize();
+
+    const settingsBtn = document.querySelector("[data-chat-settings-btn]");
+    if (settingsBtn) {
+      const freshSettingsBtn = settingsBtn.cloneNode(true);
+      settingsBtn.replaceWith(freshSettingsBtn);
+      freshSettingsBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleChatSettingsPopover(); });
+    }
+
+    const customizeBtn = document.querySelector("[data-chat-customize-btn]");
+    if (customizeBtn) {
+      const freshCustomizeBtn = customizeBtn.cloneNode(true);
+      customizeBtn.replaceWith(freshCustomizeBtn);
+      freshCustomizeBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleChatCustomizePopover(); });
+    }
+
+    applyChatTextSize();
+  }
+
+  // ---------------------------------------------------------------------
+  // CHAT SETTINGS POPOVER — currently just text size (4 steps)
+  // ---------------------------------------------------------------------
+  let chatPopoverOutsideCloser = null;
+  function closeChatPopovers() {
+    document.querySelector("[data-chat-settings-popover]")?.remove();
+    document.querySelector("[data-chat-customize-popover]")?.remove();
+    if (chatPopoverOutsideCloser) {
+      document.removeEventListener("click", chatPopoverOutsideCloser);
+      chatPopoverOutsideCloser = null;
+    }
+  }
+  function toggleChatSettingsPopover() {
+    const wasOpen = !!document.querySelector("[data-chat-settings-popover]");
+    closeChatPopovers();
+    if (wasOpen) return;
+    const btn = document.querySelector("[data-chat-settings-btn]");
+    if (!btn) return;
+    const idx = getChatTextSizeIndex();
+    const pop = document.createElement("div");
+    pop.className = "chat-toolbar-popover";
+    pop.setAttribute("data-chat-settings-popover", "");
+    pop.innerHTML = `
+      <div class="chat-toolbar-popover-title">Text Size</div>
+      <input type="range" min="0" max="3" step="1" value="${idx}" data-chat-textsize-slider>
+      <div class="chat-toolbar-popover-labels"><span>A</span><span style="font-size:16px;">A</span></div>
+    `;
+    btn.parentElement.appendChild(pop);
+    pop.querySelector("[data-chat-textsize-slider]").addEventListener("input", (e) => {
+      setChatTextSizeIndex(parseInt(e.target.value, 10));
+    });
+    chatPopoverOutsideCloser = (ev) => {
+      if (!pop.contains(ev.target) && ev.target !== btn) closeChatPopovers();
+    };
+    setTimeout(() => document.addEventListener("click", chatPopoverOutsideCloser), 0);
+  }
+
+  // ---------------------------------------------------------------------
+  // RANK ICON CUSTOMIZE POPOVER — pick which rank icon (Bronze..Infernal
+  // Diamond, or None) shows next to YOUR name in chat. Purely cosmetic —
+  // does not change your real rank, only which badge is displayed.
+  // ---------------------------------------------------------------------
+  const CHAT_ICON_OVERRIDE_KEY = "nj_chat_icon_override"; // one of Shell.RANK_TRACKS, "" (auto/real rank), or "none"
+  function getChatIconOverride() {
+    return localStorage.getItem(CHAT_ICON_OVERRIDE_KEY) || "";
+  }
+  function setChatIconOverride(track) {
+    localStorage.setItem(CHAT_ICON_OVERRIDE_KEY, track || "");
+  }
+  function toggleChatCustomizePopover() {
+    const wasOpen = !!document.querySelector("[data-chat-customize-popover]");
+    closeChatPopovers();
+    if (wasOpen) return;
+    const btn = document.querySelector("[data-chat-customize-btn]");
+    if (!btn) return;
+    const current = getChatIconOverride();
+    const myTier = Shell.rankStats().tier; // 0 = Unranked, up to RANK_TOTAL_TIERS
+    const highestUnlockedIndex = Math.floor((myTier - 1) / Shell.RANK_TIERS); // -1 if tier is 0 (Unranked)
+    const unlockedTracks = Shell.RANK_TRACKS.filter((_, i) => i <= highestUnlockedIndex);
+    const tracks = ["", ...unlockedTracks, "none"];
+    const labelFor = (t) => t === "" ? "Automatic (my real rank)" : t === "none" ? "No icon" : t;
+    const pop = document.createElement("div");
+    pop.className = "chat-toolbar-popover";
+    pop.setAttribute("data-chat-customize-popover", "");
+    pop.innerHTML = `
+      <div class="chat-toolbar-popover-title">Rank Icon</div>
+      <div class="chat-icon-option-list">
+        ${tracks.map((t) => {
+          const active = t === current;
+          const swatch = (t && t !== "none") ? Shell.rankColorFor(t).color : "#55617a";
+          return `<button class="chat-icon-option ${active ? "active" : ""}" data-chat-icon-pick="${t}">
+            <span class="chat-icon-option-dot" style="background:${swatch};"></span>
+            <span>${labelFor(t)}</span>
+          </button>`;
+        }).join("")}
+      </div>
+    `;
+    btn.parentElement.appendChild(pop);
+    pop.querySelectorAll("[data-chat-icon-pick]").forEach((b) => b.onclick = () => {
+      setChatIconOverride(b.dataset.chatIconPick);
+      closeChatPopovers();
+      renderMessages();
+    });
+    chatPopoverOutsideCloser = (ev) => {
+      if (!pop.contains(ev.target) && ev.target !== btn) closeChatPopovers();
+    };
+    setTimeout(() => document.addEventListener("click", chatPopoverOutsideCloser), 0);
+  }
+
+  // ---------------------------------------------------------------------
+  // DRAG + RESIZE — same pattern as shell.js's floating developer tools
+  // panel: mousedown on the header starts a drag, mousedown on the corner
+  // handle starts a resize. Position/size are saved to localStorage so the
+  // panel stays where you left it across page loads.
+  // ---------------------------------------------------------------------
+  let chatPanelDrag = null;   // { offsetX, offsetY } while dragging
+  let chatPanelResize = null; // { startX, startY, startW, startH } while resizing
+  let chatDragBound = false;
+
+  function bindPanelDragAndResize() {
+    const panel = document.querySelector("[data-chat-panel]");
+    const dragHandle = document.querySelector("[data-chat-drag-handle]");
+    const resizeHandle = document.querySelector("[data-chat-resize-handle]");
+    if (!panel) return;
+
+    if (dragHandle) dragHandle.addEventListener("mousedown", (e) => {
+      if (!isPanelPoppedOut()) return;
+      if (e.target.closest("[data-chat-close]")) return;
+      const rect = panel.getBoundingClientRect();
+      chatPanelDrag = { offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+      panel.classList.add("dragging");
+      e.preventDefault();
+    });
+
+    if (resizeHandle) resizeHandle.addEventListener("mousedown", (e) => {
+      if (!isPanelPoppedOut()) return;
+      const rect = panel.getBoundingClientRect();
+      chatPanelResize = { startX: e.clientX, startY: e.clientY, startW: rect.width, startH: rect.height };
+      panel.classList.add("dragging");
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    // Bound once ever — safe to call bindPanelDragAndResize() repeatedly (it runs on every
+    // mount()) since this guard stops duplicate listeners from piling up.
+    if (chatDragBound) return;
+    chatDragBound = true;
+
+    window.addEventListener("mousemove", (e) => {
+      const livePanel = document.querySelector("[data-chat-panel]");
+      if (!livePanel) return;
+
+      if (chatPanelDrag) {
+        const w = livePanel.offsetWidth, h = livePanel.offsetHeight;
+        const left = Math.max(8, Math.min(e.clientX - chatPanelDrag.offsetX, window.innerWidth - w - 8));
+        const top = Math.max(8, Math.min(e.clientY - chatPanelDrag.offsetY, window.innerHeight - h - 8));
+        livePanel.style.left = left + "px";
+        livePanel.style.top = top + "px";
+        livePanel.style.right = "auto";
+        setPanelPos({ left, top });
+      }
+
+      if (chatPanelResize) {
+        const dx = e.clientX - chatPanelResize.startX;
+        const dy = e.clientY - chatPanelResize.startY;
+        const minW = 300, minH = 360;
+        const maxW = window.innerWidth - 16, maxH = window.innerHeight - 16;
+        const width = Math.max(minW, Math.min(maxW, chatPanelResize.startW + dx));
+        const height = Math.max(minH, Math.min(maxH, chatPanelResize.startH + dy));
+        livePanel.style.width = width + "px";
+        livePanel.style.height = height + "px";
+        setPanelSize({ width, height });
+        const msgBox = livePanel.querySelector("[data-chat-messages]");
+        if (msgBox) msgBox.scrollTop = msgBox.scrollHeight;
+      }
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (!chatPanelDrag && !chatPanelResize) return;
+      chatPanelDrag = null;
+      chatPanelResize = null;
+      document.querySelector("[data-chat-panel]")?.classList.remove("dragging");
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -607,6 +911,14 @@ window.Chat = (() => {
       // Only now — write confirmed — do we take the money.
       Shell.addCashBalance(-amount);
       Shell.notify(`Gift sent to ${recipientName || "player"}!`);
+      db.ref("chat").push({
+        id: "", // system message, not clickable as a profile
+        name: "",
+        color: "",
+        text: "",
+        giftEvent: { senderName: player.name, recipientName: recipientName || "player", amount },
+        time: firebase.database.ServerValue.TIMESTAMP,
+      });
     }).catch((err) => {
       console.warn("Chat: direct gift failed to send.", err);
       // Surface a clearer message for the single most common cause (rules not published yet).
@@ -655,7 +967,7 @@ window.Chat = (() => {
         ${isSelf
           ? ""
           : info.online
-            ? `<button class="chat-send-btn chat-gift-btn" data-chat-gift-open="${escapeHTML(id)}" data-chat-gift-name="${escapeHTML(name)}">${Shell.svg("gift")} Gift ${escapeHTML(name)}</button>`
+            ? `<button class="chat-send-btn chat-gift-btn" data-chat-gift-open="${escapeHTML(id)}" data-chat-gift-name="${escapeHTML(name)}">${Shell.svg("gift")} Gift</button>`
             : `<div class="chat-gift-offline-note">${Shell.svg("bolt")} ${escapeHTML(name)} isn't online right now, so they can't be gifted this way. Wait until they're back online, or use a gift code from the Gifts page instead.</div>`}
       </div>
     </div>`;
@@ -689,7 +1001,12 @@ window.Chat = (() => {
         </div>
         <div class="dev-row">
           <div class="dev-row-label">Amount to gift</div>
-          <div class="dev-row-controls"><input type="number" min="0" step="0.01" placeholder="0.00" data-chat-gift-amount></div>
+          <div class="dev-row-controls">
+            <input type="number" min="0" step="0.01" placeholder="0.00" data-chat-gift-amount>
+            <button class="dev-btn" data-chat-gift-half type="button">½</button>
+            <button class="dev-btn" data-chat-gift-double type="button">2×</button>
+            <button class="dev-btn" data-chat-gift-max type="button">MAX</button>
+          </div>
         </div>
         <div data-chat-gift-error style="display:none; margin:8px 0 0; color:var(--red); font-size:11px; font-weight:700;"></div>
         <button class="chat-send-btn chat-gift-btn" data-chat-gift-confirm style="width:100%; margin-top:14px; height:44px;">${Shell.svg("gift")} Confirm Gift</button>
@@ -709,6 +1026,20 @@ window.Chat = (() => {
     overlay.addEventListener("click", (e) => { if (e.target === overlay) closeGiftModal(); });
     document.querySelector("[data-chat-gift-close]")?.addEventListener("click", closeGiftModal);
     document.querySelector("[data-chat-gift-amount]")?.focus();
+    const amountInput = document.querySelector("[data-chat-gift-amount]");
+    document.querySelector("[data-chat-gift-half]")?.addEventListener("click", () => {
+      const v = parseFloat(amountInput.value) || 0;
+      amountInput.value = (v / 2).toFixed(2);
+    });
+    document.querySelector("[data-chat-gift-double]")?.addEventListener("click", () => {
+      const v = parseFloat(amountInput.value) || 0;
+      const doubled = v * 2;
+      const capped = Math.min(doubled, Shell.getCashBalance());
+      amountInput.value = capped.toFixed(2);
+    });
+    document.querySelector("[data-chat-gift-max]")?.addEventListener("click", () => {
+      amountInput.value = Shell.getCashBalance().toFixed(2);
+    });
     const confirmBtn = document.querySelector("[data-chat-gift-confirm]");
     confirmBtn?.addEventListener("click", () => {
       const input = document.querySelector("[data-chat-gift-amount]");

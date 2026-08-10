@@ -194,20 +194,16 @@ window.GAME_CATALOG = [
     art: "chickencross",
     image: "./art/casebattles.png",
     available: true
-  }
-];
-
-// Slot titles are shown in their own "Slots" shelf, separate from the main Originals catalog.
-window.SLOT_CATALOG = [
+  },
   {
-    id: "aviamaster",
-    name: "Aviamaster",
-    description: "A soaring slot with rising multipliers on every reel.",
-    tag: "Slot",
-    rating: "4.6",
-    players: "701 playing",
-    art: "aviamaster",
-    image: "./art/aviamaster.png",
-    available: false
+    id: "pump",
+    name: "Pump",
+    description: "Pump the balloon and cash out before it pops.",
+    tag: "Arcade",
+    rating: "4.5",
+    players: "0 playing",
+    art: "pump",
+    image: "./art/pump.jpg",
+    available: true
   }
 ];

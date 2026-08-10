@@ -200,11 +200,17 @@
         // showing the full win ladder scrolling past sells the "this is still a real case, it
         // just can't land on nothing" idea instead of looking like a different mechanic.
         const WIN_TIERS = TIERS.filter((t) => t.key !== "none").concat([Shell.LEGENDARY_TIER]);
+        const EXOTIC_WIN_TIERS = Shell.EXOTIC_TIERS.map((t) => {
+          if (t.key === "legendary") return Shell.LEGENDARY_TIER;
+          if (t.key === "exotic") return Shell.EXOTIC_TIER;
+          return TIERS.find((x) => x.key === t.key);
+        });
         let opening = false;
         let batchSelected = false; // "Open N at once" toggle — expands the case box to N lanes
-        let pageTab = "open"; // "open" | "combine"
-        let combining = false; // true while a Combine Cases legendary reel is animating
-        let combineAutoRolling = false; // Auto Roll toggle for the Combine Cases panel
+        let pageTab = "open"; // "open" | "legendary" | "exotic"
+        let combining = false; // true while a Legendary/Exotic reel is animating
+        let combineAutoRolling = false; // Auto Roll toggle for the Legendary panel
+        let exoticAutoRolling = false;  // Auto Roll toggle for the Exotic panel
 
         // one "display item" per tier, used to build the scrolling reel strip
         // Tracks the player's most recent case-opening result so the right-hand card can
@@ -233,11 +239,23 @@
           </div>`;
         }
 
-        function combineNoteLabel() {
+        function legendaryConvertNoteLabel() {
           const cost = Shell.LEGENDARY_CASE_COST;
           const cases = Shell.raffleSpinsAvailable();
-          if (cases >= cost) return `<strong>${cases}</strong> case${cases === 1 ? "" : "s"} available — enough to combine`;
-          return `<strong>${cases}</strong> of <strong>${cost}</strong> cases needed to combine`;
+          const owned = Shell.getLegendaryCasesOwned();
+          const convertLine = cases >= cost
+            ? `<strong>${cases}</strong> regular case${cases === 1 ? "" : "s"} available — enough to convert`
+            : `<strong>${cases}</strong> of <strong>${cost}</strong> regular cases needed to convert`;
+          return `${convertLine}<br>You own <strong>${owned}</strong> Legendary case${owned === 1 ? "" : "s"} ready to open.`;
+        }
+        function exoticConvertNoteLabel() {
+          const cost = Shell.EXOTIC_CASE_COST;
+          const legOwned = Shell.getLegendaryCasesOwned();
+          const owned = Shell.getExoticCasesOwned();
+          const convertLine = legOwned >= cost
+            ? `<strong>${legOwned}</strong> Legendary case${legOwned === 1 ? "" : "s"} available — enough to convert`
+            : `<strong>${legOwned}</strong> of <strong>${cost}</strong> Legendary cases needed to convert`;
+          return `${convertLine}<br>You own <strong>${owned}</strong> Exotic case${owned === 1 ? "" : "s"} ready to open.`;
         }
 
         function renderRecentWin(result) {
@@ -247,7 +265,7 @@
         }
 
         function tierIcon(key) {
-          return ({ none: "x", mini: "spark", minor: "bolt", major: "sparkles", grand: "gift", legendary: "sparkles" })[key] || "spark";
+          return ({ none: "x", mini: "spark", minor: "bolt", major: "sparkles", grand: "gift", legendary: "sparkles", exotic: "bolt" })[key] || "spark";
         }
         function displayLabel(t) { return t.key === "none" ? "No win" : t.label; }
 
@@ -355,6 +373,18 @@
           </div>`;
         }
 
+        function exoticReelWrapHTML() {
+          const idleStrip = EXOTIC_WIN_TIERS.concat(EXOTIC_WIN_TIERS).concat(EXOTIC_WIN_TIERS);
+          return `<div class="case-reel-wrap legendary-reel">
+            <div class="case-reel-fade left"></div>
+            <div class="case-reel-fade right"></div>
+            <div class="case-reel-marker"></div>
+            <div class="case-reel-track" data-exotic-track style="transform: translateX(-50%);">
+              ${idleStrip.map((t) => itemHTML(t)).join("")}
+            </div>
+          </div>`;
+        }
+
         function paint() {
           const cases = Shell.raffleSpinsAvailable();
           const idleStrip = TIERS.concat(TIERS).concat(TIERS); // idle preview, not the real result
@@ -367,12 +397,17 @@
             : reelWrapHTML(`data-case-track`, idleStrip);
 
           const legendaryCost = Shell.LEGENDARY_CASE_COST;
-          const canCombine = Shell.canCombineForLegendary();
+          const exoticCost = Shell.EXOTIC_CASE_COST;
+          const canConvertLegendary = Shell.raffleSpinsAvailable() >= legendaryCost;
+          const canOpenLegendary = Shell.canOpenLegendaryCase();
+          const canConvertExotic = Shell.getLegendaryCasesOwned() >= exoticCost;
+          const canOpenExotic = Shell.canOpenExoticCase();
 
           content.innerHTML = `<div class="content">
             <div class="case-page-tabs">
               <button class="case-page-tab ${pageTab === "open" ? "active" : ""}" data-page-tab="open">${svg("gift")} Open Cases</button>
-              <button class="case-page-tab ${pageTab === "combine" ? "active" : ""}" data-page-tab="combine">${svg("sparkles")} Combine Cases</button>
+              <button class="case-page-tab ${pageTab === "legendary" ? "active" : ""}" data-page-tab="legendary">${svg("sparkles")} Legendary Cases</button>
+              <button class="case-page-tab ${pageTab === "exotic" ? "active" : ""}" data-page-tab="exotic">${svg("sparkles")} Exotic Cases</button>
             </div>
 
             <div class="case-page-panel ${pageTab === "open" ? "active" : ""}">
@@ -419,12 +454,12 @@
               </div>
             </div>
 
-            <div class="case-page-panel ${pageTab === "combine" ? "active" : ""}">
+            <div class="case-page-panel ${pageTab === "legendary" ? "active" : ""}">
               <div class="case-top-grid">
                 <div class="intro-card">
                   <div class="eyebrow"><i></i> Room reward</div>
-                  <h1>Combine into a <em>bigger case.</em></h1>
-                  <p>Trade in ${legendaryCost} regular case openings for one Combine spin. Same odds curve as a normal case, shifted up a tier: "No win" never lands (Mini takes its place), and Legendary — the new top prize — is exactly as rare as Grand is on a normal case. Nothing here is guaranteed except that you'll walk away with something.</p>
+                  <h1>Convert into <em>Legendary cases.</em></h1>
+                  <p>Convert ${legendaryCost} regular case openings into 1 Legendary case. Once you own one, open it separately below. Same odds curve as a normal case, shifted up a tier: "No win" never lands (Mini takes its place), and Legendary — the new top prize — is exactly as rare as Grand is on a normal case.</p>
                 </div>
                 <div class="recent-win-card">
                   <div class="recent-win-title">${svg("gift")} Recently won</div>
@@ -436,10 +471,12 @@
                 ${combineReelWrapHTML()}
 
                 <div class="case-open-row">
-                  <button class="case-open-btn legendary-btn" data-combine-open ${canCombine && !combining ? "" : "disabled"}>${svg("sparkles")} ${combining ? "Combining…" : `Combine ${legendaryCost} cases`}</button>
-                  <button class="case-x5-toggle ${combineAutoRolling ? "active" : ""}" data-combine-auto-toggle title="When on, keeps combining automatically every time you have ${legendaryCost}+ cases available">${svg("rotate")} ${combineAutoRolling ? "Auto Roll: On" : "Auto Roll"}</button>
+                  <button class="case-open-btn" data-legendary-convert ${canConvertLegendary ? "" : "disabled"}>${svg("gift")} Convert ${legendaryCost} cases</button>
+                  <button class="case-x5-toggle" data-legendary-convert-all ${canConvertLegendary ? "" : "disabled"} title="Converts as many regular cases as possible into Legendary cases, all at once">${svg("sparkles")} Convert All</button>
+                  <button class="case-open-btn legendary-btn" data-combine-open ${canOpenLegendary && !combining ? "" : "disabled"}>${svg("sparkles")} ${combining ? "Opening…" : "Open Legendary Case"}</button>
+                  <button class="case-x5-toggle ${combineAutoRolling ? "active" : ""}" data-combine-auto-toggle title="When on, keeps opening Legendary cases automatically as long as you own one">${svg("rotate")} ${combineAutoRolling ? "Auto Roll: On" : "Auto Roll"}</button>
                 </div>
-                <div class="case-note combine-note">${combineNoteLabel()}</div>
+                <div class="case-note combine-note" data-legendary-note>${legendaryConvertNoteLabel()}</div>
 
                 <div class="case-result" data-combine-result>
                   <div class="case-result-label">Result</div>
@@ -447,6 +484,39 @@
                 </div>
 
                 <div class="case-legend">${WIN_TIERS.map((t) => `<div class="case-legend-item"><span class="case-legend-dot" style="background:${t.color};"></span>${displayLabel(t)}</div>`).join("")}</div>
+              </div>
+            </div>
+
+            <div class="case-page-panel ${pageTab === "exotic" ? "active" : ""}">
+              <div class="case-top-grid">
+                <div class="intro-card">
+                  <div class="eyebrow"><i></i> Room reward</div>
+                  <h1>Convert into <em>Exotic cases.</em></h1>
+                  <p>Convert ${exoticCost} Legendary cases into 1 Exotic case. Exotic cases drop "Mini" entirely — Minor takes its place — and the new top prize, Exotic, pays 3x what a Legendary case's own top prize pays.</p>
+                </div>
+                <div class="recent-win-card">
+                  <div class="recent-win-title">${svg("gift")} Recently won</div>
+                  <div data-recent-win-card>${recentWinCardHTML()}</div>
+                </div>
+              </div>
+
+              <div class="case-card">
+                ${exoticReelWrapHTML()}
+
+                <div class="case-open-row">
+                  <button class="case-open-btn" data-exotic-convert ${canConvertExotic ? "" : "disabled"}>${svg("gift")} Convert ${exoticCost} Legendary cases</button>
+                  <button class="case-x5-toggle" data-exotic-convert-all ${canConvertExotic ? "" : "disabled"} title="Converts as many Legendary cases as possible into Exotic cases, all at once">${svg("sparkles")} Convert All</button>
+                  <button class="case-open-btn legendary-btn" data-exotic-open ${canOpenExotic && !combining ? "" : "disabled"}>${svg("sparkles")} ${combining ? "Opening…" : "Open Exotic Case"}</button>
+                  <button class="case-x5-toggle ${exoticAutoRolling ? "active" : ""}" data-exotic-auto-toggle title="When on, keeps opening Exotic cases automatically as long as you own one">${svg("rotate")} ${exoticAutoRolling ? "Auto Roll: On" : "Auto Roll"}</button>
+                </div>
+                <div class="case-note combine-note" data-exotic-note>${exoticConvertNoteLabel()}</div>
+
+                <div class="case-result" data-exotic-result>
+                  <div class="case-result-label">Result</div>
+                  <div class="case-result-value legendary" data-exotic-result-value></div>
+                </div>
+
+                <div class="case-legend">${EXOTIC_WIN_TIERS.map((t) => `<div class="case-legend-item"><span class="case-legend-dot" style="background:${t.color};"></span>${t.label}</div>`).join("")}</div>
               </div>
             </div>
 
@@ -513,23 +583,79 @@
             pageTab = btn.dataset.pageTab;
             paint();
           });
+          const legendaryConvertBtn = content.querySelector("[data-legendary-convert]");
+          if (legendaryConvertBtn) legendaryConvertBtn.onclick = () => {
+            if (opening || combining) return;
+            if (Shell.convertToLegendaryCase()) {
+              Shell.playChipSound("select");
+              Shell.notify("Converted into 1 Legendary case.");
+              paint();
+            }
+          };
+
+          const legendaryConvertAllBtn = content.querySelector("[data-legendary-convert-all]");
+          if (legendaryConvertAllBtn) legendaryConvertAllBtn.onclick = () => {
+            if (opening || combining) return;
+            const count = Shell.convertAllToLegendaryCases();
+            if (count > 0) {
+              Shell.playChipSound("select");
+              Shell.notify(`Converted into ${count} Legendary case${count === 1 ? "" : "s"}.`);
+              paint();
+            }
+          };
+
           const combineBtn = content.querySelector("[data-combine-open]");
           if (combineBtn) combineBtn.onclick = () => doCombine();
           const combineAutoBtn = content.querySelector("[data-combine-auto-toggle]");
           if (combineAutoBtn) combineAutoBtn.onclick = () => {
             const turningOn = !combineAutoRolling;
-            if (turningOn && !Shell.canCombineForLegendary()) {
-              Shell.notify(`You don't have enough cases to auto combine yet.`);
+            if (turningOn && !Shell.canOpenLegendaryCase()) {
+              Shell.notify(`You don't own a Legendary case to auto open yet.`);
               return;
             }
             combineAutoRolling = turningOn;
-            // Same reasoning as the Open Cases Auto Roll toggle: never call paint() while a
-            // combine is actively resolving/animating, since that would rebuild the DOM out
-            // from under the in-flight doCombine() setTimeout callback. Patch the button in
-            // place instead if a combine is currently running.
             if (combining) {
               combineAutoBtn.classList.toggle("active", combineAutoRolling);
               combineAutoBtn.innerHTML = `${svg("rotate")} ${combineAutoRolling ? "Auto Roll: On" : "Auto Roll"}`;
+              return;
+            }
+            paint();
+          };
+
+          const exoticConvertBtn = content.querySelector("[data-exotic-convert]");
+          if (exoticConvertBtn) exoticConvertBtn.onclick = () => {
+            if (opening || combining) return;
+            if (Shell.convertToExoticCase()) {
+              Shell.playChipSound("select");
+              Shell.notify("Converted into 1 Exotic case.");
+              paint();
+            }
+          };
+
+          const exoticConvertAllBtn = content.querySelector("[data-exotic-convert-all]");
+          if (exoticConvertAllBtn) exoticConvertAllBtn.onclick = () => {
+            if (opening || combining) return;
+            const count = Shell.convertAllToExoticCases();
+            if (count > 0) {
+              Shell.playChipSound("select");
+              Shell.notify(`Converted into ${count} Exotic case${count === 1 ? "" : "s"}.`);
+              paint();
+            }
+          };
+
+          const exoticOpenBtn = content.querySelector("[data-exotic-open]");
+          if (exoticOpenBtn) exoticOpenBtn.onclick = () => doExotic();
+          const exoticAutoBtn = content.querySelector("[data-exotic-auto-toggle]");
+          if (exoticAutoBtn) exoticAutoBtn.onclick = () => {
+            const turningOn = !exoticAutoRolling;
+            if (turningOn && !Shell.canOpenExoticCase()) {
+              Shell.notify(`You don't own an Exotic case to auto open yet.`);
+              return;
+            }
+            exoticAutoRolling = turningOn;
+            if (combining) {
+              exoticAutoBtn.classList.toggle("active", exoticAutoRolling);
+              exoticAutoBtn.innerHTML = `${svg("rotate")} ${exoticAutoRolling ? "Auto Roll: On" : "Auto Roll"}`;
               return;
             }
             paint();
@@ -541,73 +667,181 @@
         // always lands on the Legendary tier since the outcome is guaranteed. ----
         function doCombine() {
           if (combining) return;
-          if (!Shell.canCombineForLegendary()) { paint(); return; }
+          if (!Shell.canOpenLegendaryCase()) { paint(); return; }
           if (!content.querySelector("[data-combine-track]")) paint();
           combining = true;
 
-          const track = content.querySelector("[data-combine-track]");
-          const btn = content.querySelector("[data-combine-open]");
-          const resultBox = content.querySelector("[data-combine-result]");
-          const resultValue = content.querySelector("[data-combine-result-value]");
-          resultBox.classList.remove("show");
-          if (btn) { btn.disabled = true; btn.innerHTML = `${svg("sparkles")} Combining…`; }
+          try {
+            const track = content.querySelector("[data-combine-track]");
+            const btn = content.querySelector("[data-combine-open]");
+            const resultBox = content.querySelector("[data-combine-result]");
+            const resultValue = content.querySelector("[data-combine-result-value]");
 
-          // Resolve the combine now (this immediately deducts the 25 cases inside Shell) —
-          // same "resolve first, animate to match" pattern as doOpen — then reflect the
-          // deduction in the note right away instead of waiting for the reel to land.
-          const result = Shell.combineCasesForLegendary();
-          Shell.playChipSound("select");
-          const noteEl = content.querySelector(".combine-note");
-          if (noteEl) noteEl.innerHTML = combineNoteLabel();
+            if (!track || !btn || !resultBox || !resultValue) {
+              throw new Error("doCombine: missing expected DOM elements — " +
+                JSON.stringify({ track: !!track, btn: !!btn, resultBox: !!resultBox, resultValue: !!resultValue }));
+            }
 
-          // The reel must land on whatever tier was actually rolled, not always Legendary —
-          // Legendary is now just as rare here as Grand is on the normal wheel.
-          const wonTierInfo = WIN_TIERS.find((t) => t.key === (result ? result.tier : "mini")) || WIN_TIERS[0];
-          const strip = buildWinReelStrip(wonTierInfo);
-          track.style.transition = "none";
-          track.innerHTML = strip.map((t, i) => itemHTML(t, undefined, i === WINNER_INDEX ? "winner-target" : "")).join("");
-          track.style.transform = "translateX(-50%)";
-          void track.offsetWidth;
+            resultBox.classList.remove("show");
+            btn.disabled = true;
+            btn.innerHTML = `${svg("sparkles")} Opening…`;
 
-          const sampleItem = track.children[0];
-          const itemRect = sampleItem ? sampleItem.getBoundingClientRect() : { width: 128 };
-          const trackStyle = getComputedStyle(track);
-          const trackGap = parseFloat(trackStyle.gap || trackStyle.columnGap) || 12;
-          const trackPadLeft = parseFloat(trackStyle.paddingLeft) || 0;
-          const stride = itemRect.width + trackGap;
-          const targetOffset = -(trackPadLeft + WINNER_INDEX * stride + itemRect.width / 2);
+            const result = Shell.openLegendaryCase();
+            Shell.playChipSound("select");
+            const noteEl = content.querySelector("[data-legendary-note]");
+            if (noteEl) noteEl.innerHTML = legendaryConvertNoteLabel();
 
-          const spinMs = Shell.caseSpinDurationMs();
-          requestAnimationFrame(() => {
-            track.style.transition = `transform ${spinMs}ms cubic-bezier(.1,.7,.15,1)`;
-            track.style.transform = `translateX(${targetOffset}px)`;
-          });
+            const wonTierInfo = WIN_TIERS.find((t) => t.key === (result ? result.tier : "mini")) || WIN_TIERS[0];
+            const strip = buildWinReelStrip(wonTierInfo);
+            track.style.transition = "none";
+            track.innerHTML = strip.map((t, i) => itemHTML(t, undefined, i === WINNER_INDEX ? "winner-target" : "")).join("");
+            track.style.transform = "translateX(-50%)";
+            void track.offsetWidth;
 
-          setTimeout(() => {
+            const sampleItem = track.children[0];
+            const itemRect = sampleItem ? sampleItem.getBoundingClientRect() : { width: 128 };
+            const trackStyle = getComputedStyle(track);
+            const trackGap = parseFloat(trackStyle.gap || trackStyle.columnGap) || 12;
+            const trackPadLeft = parseFloat(trackStyle.paddingLeft) || 0;
+            const stride = itemRect.width + trackGap;
+            const targetOffset = -(trackPadLeft + WINNER_INDEX * stride + itemRect.width / 2);
+
+            const spinMs = Shell.caseSpinDurationMs();
+            requestAnimationFrame(() => {
+              track.style.transition = `transform ${spinMs}ms cubic-bezier(.1,.7,.15,1)`;
+              track.style.transform = `translateX(${targetOffset}px)`;
+            });
+
+            setTimeout(() => {
+              combining = false;
+              try {
+                if (result) {
+                  const isLegendary = result.tier === "legendary";
+                  resultValue.className = "case-result-value" + (isLegendary ? " legendary" : " win");
+                  resultValue.textContent = `${wonTierInfo.label} — +${Shell.fmtMoney(result.amount)}`;
+                  resultBox.classList.add("show");
+                  const winnerEl = track.children[WINNER_INDEX];
+                  if (winnerEl) winnerEl.classList.add("winner");
+                  Shell.notify(`${wonTierInfo.label} case! +${Shell.fmtMoney(result.amount)}`);
+                  Shell.addNotification({ type: "reward", title: `Wager case — Combine (${wonTierInfo.label})`, detail: `+${Shell.fmtMoney(result.amount)} added to your balance.` });
+                  renderRecentWin({ label: `Combine — ${wonTierInfo.label}`, amount: result.amount, legendary: isLegendary });
+                }
+              } catch (innerErr) {
+                console.error("doCombine (settle step) failed:", innerErr);
+              }
+              const canOpenNow = Shell.canOpenLegendaryCase();
+              const liveBtn = content.querySelector("[data-combine-open]");
+              if (liveBtn) {
+                liveBtn.disabled = !canOpenNow;
+                liveBtn.innerHTML = `${svg("sparkles")} Open Legendary Case`;
+              }
+              const noteEl2 = content.querySelector("[data-legendary-note]");
+              if (noteEl2) noteEl2.innerHTML = legendaryConvertNoteLabel();
+              const openNote = content.querySelector(".case-note");
+              if (openNote) openNote.innerHTML = casesLeftLabel();
+              if (combineAutoRolling) { scheduleNextCombineAutoRoll(); }
+            }, spinMs + 100);
+
+          } catch (err) {
+            console.error("doCombine failed:", err);
             combining = false;
-            if (result) {
-              const isLegendary = result.tier === "legendary";
-              resultValue.className = "case-result-value" + (isLegendary ? " legendary" : " win");
-              resultValue.textContent = `${wonTierInfo.label} — +${Shell.fmtMoney(result.amount)}`;
-              resultBox.classList.add("show");
-              const winnerEl = track.children[WINNER_INDEX];
-              if (winnerEl) winnerEl.classList.add("winner");
-              Shell.notify(`${wonTierInfo.label} case! +${Shell.fmtMoney(result.amount)}`);
-              Shell.addNotification({ type: "reward", title: `Wager case — Combine (${wonTierInfo.label})`, detail: `+${Shell.fmtMoney(result.amount)} added to your balance.` });
-              renderRecentWin({ label: `Combine — ${wonTierInfo.label}`, amount: result.amount, legendary: isLegendary });
+            paint();
+          }
+        }
+
+        function doExotic() {
+          if (combining) return;
+          if (!Shell.canOpenExoticCase()) { paint(); return; }
+          if (!content.querySelector("[data-exotic-track]")) paint();
+          combining = true;
+
+          try {
+            const track = content.querySelector("[data-exotic-track]");
+            const btn = content.querySelector("[data-exotic-open]");
+            const resultBox = content.querySelector("[data-exotic-result]");
+            const resultValue = content.querySelector("[data-exotic-result-value]");
+
+            if (!track || !btn || !resultBox || !resultValue) {
+              throw new Error("doExotic: missing expected DOM elements — " +
+                JSON.stringify({ track: !!track, btn: !!btn, resultBox: !!resultBox, resultValue: !!resultValue }));
             }
-            const canCombineNow = Shell.canCombineForLegendary();
-            if (btn) {
-              btn.disabled = !canCombineNow;
-              btn.innerHTML = `${svg("sparkles")} Combine ${Shell.LEGENDARY_CASE_COST} cases`;
+
+            resultBox.classList.remove("show");
+            btn.disabled = true;
+            btn.innerHTML = `${svg("sparkles")} Opening…`;
+
+            const result = Shell.openExoticCase();
+            Shell.playChipSound("select");
+            const noteEl = content.querySelector("[data-exotic-note]");
+            if (noteEl) noteEl.innerHTML = exoticConvertNoteLabel();
+
+            const wonTierInfo = EXOTIC_WIN_TIERS.find((t) => t.key === (result ? result.tier : "minor")) || EXOTIC_WIN_TIERS[0];
+            const items = [];
+            for (let i = 0; i < REEL_LEN; i++) {
+              items.push(i === WINNER_INDEX ? wonTierInfo : EXOTIC_WIN_TIERS[Math.floor(Math.random() * EXOTIC_WIN_TIERS.length)]);
             }
-            if (noteEl) noteEl.innerHTML = combineNoteLabel();
-            // Also refresh the Open Cases tab's own counter, in case the player switches back
-            // to it without triggering a full repaint some other way first.
-            const openNote = content.querySelector(".case-note");
-            if (openNote) openNote.innerHTML = casesLeftLabel();
-            if (combineAutoRolling) { scheduleNextCombineAutoRoll(); }
-          }, spinMs + 100);
+            track.style.transition = "none";
+            track.innerHTML = items.map((t, i) => itemHTML(t, undefined, i === WINNER_INDEX ? "winner-target" : "")).join("");
+            track.style.transform = "translateX(-50%)";
+            void track.offsetWidth;
+
+            const sampleItem = track.children[0];
+            const itemRect = sampleItem ? sampleItem.getBoundingClientRect() : { width: 128 };
+            const trackStyle = getComputedStyle(track);
+            const trackGap = parseFloat(trackStyle.gap || trackStyle.columnGap) || 12;
+            const trackPadLeft = parseFloat(trackStyle.paddingLeft) || 0;
+            const stride = itemRect.width + trackGap;
+            const targetOffset = -(trackPadLeft + WINNER_INDEX * stride + itemRect.width / 2);
+
+            const spinMs = Shell.caseSpinDurationMs();
+            requestAnimationFrame(() => {
+              track.style.transition = `transform ${spinMs}ms cubic-bezier(.1,.7,.15,1)`;
+              track.style.transform = `translateX(${targetOffset}px)`;
+            });
+
+            setTimeout(() => {
+              combining = false;
+              try {
+                if (result) {
+                  const isExotic = result.tier === "exotic";
+                  resultValue.className = "case-result-value" + (isExotic ? " legendary" : " win");
+                  resultValue.textContent = `${wonTierInfo.label} — +${Shell.fmtMoney(result.amount)}`;
+                  resultBox.classList.add("show");
+                  const winnerEl = track.children[WINNER_INDEX];
+                  if (winnerEl) winnerEl.classList.add("winner");
+                  Shell.notify(`${wonTierInfo.label} case! +${Shell.fmtMoney(result.amount)}`);
+                  Shell.addNotification({ type: "reward", title: `Wager case — Exotic (${wonTierInfo.label})`, detail: `+${Shell.fmtMoney(result.amount)} added to your balance.` });
+                  renderRecentWin({ label: `Exotic — ${wonTierInfo.label}`, amount: result.amount, legendary: isExotic });
+                }
+              } catch (innerErr) {
+                console.error("doExotic (settle step) failed:", innerErr);
+              }
+              const canOpenNow = Shell.canOpenExoticCase();
+              const liveBtn = content.querySelector("[data-exotic-open]");
+              if (liveBtn) {
+                liveBtn.disabled = !canOpenNow;
+                liveBtn.innerHTML = `${svg("sparkles")} Open Exotic Case`;
+              }
+              const noteEl2 = content.querySelector("[data-exotic-note]");
+              if (noteEl2) noteEl2.innerHTML = exoticConvertNoteLabel();
+              if (exoticAutoRolling) { scheduleNextExoticAutoRoll(); }
+            }, spinMs + 100);
+
+          } catch (err) {
+            console.error("doExotic failed:", err);
+            combining = false;
+            paint();
+          }
+        }
+
+        function scheduleNextExoticAutoRoll() {
+          if (!exoticAutoRolling) return;
+          setTimeout(() => {
+            if (!exoticAutoRolling || combining) return;
+            if (Shell.canOpenExoticCase()) { doExotic(); return; }
+            exoticAutoRolling = false;
+            paint();
+          }, 500);
         }
 
         // ---- Combine Auto Roll: keeps combining back to back, as long as the toggle is on
@@ -617,7 +851,7 @@
           if (!combineAutoRolling) return;
           setTimeout(() => {
             if (!combineAutoRolling || combining) return;
-            if (Shell.canCombineForLegendary()) { doCombine(); return; }
+            if (Shell.canOpenLegendaryCase()) { doCombine(); return; }
             combineAutoRolling = false;
             paint();
           }, 500);

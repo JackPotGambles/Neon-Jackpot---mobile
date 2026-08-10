@@ -43,6 +43,8 @@ window.Shell = (() => {
   const DEV_ENABLED_KEY = "nj_developer_enabled"; // per-account on/off switch, only meaningful once unlocked
   const DEV_SNAPSHOT_KEY = "nj_dev_snapshot"; // per-account: pre-dev-tools snapshot for "revert changes"
   const CASE_UPGRADE_KEY = "nj_case_upgrades"; // wager case Luck/Speed/Multiplier upgrade levels
+  const LEGENDARY_CASE_OWNED_KEY = "nj_legendary_cases_owned"; // count of converted, unopened Legendary cases
+  const EXOTIC_CASE_OWNED_KEY = "nj_exotic_cases_owned"; // count of converted, unopened Exotic cases
   const PROMO_REDEEMED_KEY = "nj_promo_redeemed"; // moved up from further down the file so it's declared before SYNC_KEYS references it
   const RAIL_DROPDOWN_KEY = "nj_rail_dropdowns"; // { originals: bool, slots: bool } — moved up from further down the file for the same reason
   const ACCOUNTS_KEY = "nj_accounts"; // { [username]: { password, snapshot: {...SYNC_KEYS data}, syncCodeClaimed?: true } } — NOT real security, this is a client-side demo with no server; password is stored as plain text the same way the old sync code was just a plain base64 blob
@@ -506,11 +508,11 @@ window.Shell = (() => {
   const SYNC_KEYS = [
     BALANCE_KEY, VAULT_KEY, EARN_KEY, NOTIF_KEY, RECENT_SEARCH_KEY,
     PLAYER_KEY, CLAIM_KEY, CLAIM_TOTALS_KEY, BOOST_KEY, RAFFLE_KEY,
-    LIFETIME_WAGERED_KEY, RAKEBACK_KEY, FAVORITES_KEY, SIDEBAR_COLLAPSE_KEY,
+    LIFETIME_WAGERED_KEY, RAKEBACK_KEY, FAVORITES_KEY,
     DEV_KEY, DEV_ENABLED_KEY, DEV_SNAPSHOT_KEY,
     REWARD_BALANCE_KEY, ACTIVE_CURRENCY_KEY, REWARD_LOCK_KEY, CASE_UPGRADE_KEY,
-    RECENT_WINS_KEY, RAIL_DROPDOWN_KEY,
-    "nj_sent_gifts", // gifts.js — cosmetic "gifts I've sent" history, fine to travel with the account like any other per-account display data
+    RECENT_WINS_KEY, RAIL_DROPDOWN_KEY, LEGENDARY_CASE_OWNED_KEY, EXOTIC_CASE_OWNED_KEY,
+    "nj_sent_gifts",
     // NOTE: nj_redeemed_gifts is deliberately NOT in this list, for the same reason
     // PROMO_REDEEMED_KEY isn't. If gift-redemption history traveled with the account snapshot,
     // switching accounts before the periodic autosave writes it back (or reverting via dev tools)
@@ -1061,7 +1063,7 @@ window.Shell = (() => {
   function accrueRakeback(betAmount) {
     if (!betAmount || betAmount <= 0) return;
     const s = getRakebackState();
-    s.available = (s.available || 0) + betAmount * RAKEBACK_RATE;
+    s.available = (s.available || 0) + betAmount * RAKEBACK_RATE * (1 + activeBoostPct("rakeback"));
     setRakebackState(s);
   }
   function getRakebackAvailable() {
@@ -1121,7 +1123,7 @@ window.Shell = (() => {
     return raw === null ? true : raw === "1"; // default on once unlocked, unless explicitly turned off
   }
   function isAppearOffline() {
-    return isDeveloper() && localStorage.getItem(APPEAR_OFFLINE_KEY) === "1";
+    return localStorage.getItem(APPEAR_OFFLINE_KEY) === "1";
   }
   function setAppearOffline(value) {
     if (value) localStorage.setItem(APPEAR_OFFLINE_KEY, "1");
@@ -1399,7 +1401,64 @@ window.Shell = (() => {
   // wheel (raffleOddsForRank never rolls it). It's only ever awarded by combineCasesForLegendary,
   // which burns LEGENDARY_CASE_COST regular case openings for one Legendary opening.
   const LEGENDARY_TIER = { key: "legendary", label: "Legendary", color: "#ff8a3d" };
-  const LEGENDARY_CASE_COST = 25; // regular cases consumed per combine
+  const EXOTIC_TIER = { key: "exotic", label: "Exotic", color: "#ff3df0" };
+  const LEGENDARY_CASE_COST = 25; // regular cases needed to convert into 1 Legendary case
+  const EXOTIC_CASE_COST = 25;    // Legendary cases needed to convert into 1 Exotic case
+
+  // ---------- owned Legendary / Exotic case counts (converted, not yet opened) ----------
+  function getLegendaryCasesOwned() {
+    const n = parseInt(localStorage.getItem(LEGENDARY_CASE_OWNED_KEY), 10);
+    return isNaN(n) ? 0 : n;
+  }
+  function setLegendaryCasesOwned(n) {
+    localStorage.setItem(LEGENDARY_CASE_OWNED_KEY, String(Math.max(0, n)));
+    document.dispatchEvent(new CustomEvent("nj:legendarycases", { detail: getLegendaryCasesOwned() }));
+  }
+  function getExoticCasesOwned() {
+    const n = parseInt(localStorage.getItem(EXOTIC_CASE_OWNED_KEY), 10);
+    return isNaN(n) ? 0 : n;
+  }
+  function setExoticCasesOwned(n) {
+    localStorage.setItem(EXOTIC_CASE_OWNED_KEY, String(Math.max(0, n)));
+    document.dispatchEvent(new CustomEvent("nj:exoticcases", { detail: getExoticCasesOwned() }));
+  }
+
+  // Converts LEGENDARY_CASE_COST regular wager cases into 1 Legendary case. Returns true/false.
+  function convertToLegendaryCase() {
+    if (raffleSpinsAvailable() < LEGENDARY_CASE_COST) return false;
+    const s = getRaffleState();
+    const wagered = getLifetimeWagered();
+    const earnedSteps = Math.floor((wagered + 1e-9) / RAFFLE_WAGER_STEP);
+    s.claimedSteps = Math.min((s.claimedSteps || 0) + LEGENDARY_CASE_COST, earnedSteps);
+    setRaffleState(s);
+    setLegendaryCasesOwned(getLegendaryCasesOwned() + 1);
+    return true;
+  }
+
+  // Converts as many batches of LEGENDARY_CASE_COST regular cases as currently possible, in
+  // one go. Returns the number of Legendary cases actually created (0 if none could be made).
+  function convertAllToLegendaryCases() {
+    let count = 0;
+    while (convertToLegendaryCase()) count++;
+    return count;
+  }
+
+  // Converts EXOTIC_CASE_COST Legendary cases into 1 Exotic case. Returns true/false.
+  function convertToExoticCase() {
+    if (getLegendaryCasesOwned() < EXOTIC_CASE_COST) return false;
+    setLegendaryCasesOwned(getLegendaryCasesOwned() - EXOTIC_CASE_COST);
+    setExoticCasesOwned(getExoticCasesOwned() + 1);
+    return true;
+  }
+
+  // Converts as many batches of EXOTIC_CASE_COST Legendary cases as currently possible, in
+  // one go. Returns the number of Exotic cases actually created (0 if none could be made).
+  function convertAllToExoticCases() {
+    let count = 0;
+    while (convertToExoticCase()) count++;
+    return count;
+  }
+
   function getRaffleState() {
     try { return JSON.parse(localStorage.getItem(RAFFLE_KEY)) || { claimedSteps: 0 }; }
     catch { return { claimedSteps: 0 }; }
@@ -1472,6 +1531,106 @@ window.Shell = (() => {
     const floor = 1800;
     return Math.round(base - (base - floor) * (lvl / CASE_UPGRADE_MAX));
   }
+
+  // ---------- BLACK MARKET ----------
+  const BLACKMARKET_KEY = "nj_blackmarket";       // { day: "dateString", items: [...], purchased: [ids] }
+  const ACTIVE_BOOSTS_KEY = "nj_active_boosts";    // [{ id, type, pct, expiresAt }]
+
+  const BM_CATALOG = [
+    { id: "passive5",  label: "Passive Boost +5%",   type: "passive",  pct: 0.05, rare: false, chance: 0.25, durationMin: 30 },
+    { id: "passive15", label: "Rare Passive Boost +15%", type: "passive", pct: 0.15, rare: true,  chance: 0.15, durationMin: 15 },
+    { id: "rake10",    label: "Rakeback Boost +10%", type: "rakeback", pct: 0.10, rare: false, chance: 0.25, durationMin: 30 },
+    { id: "rake15",    label: "Rare Rakeback Boost +15%", type: "rakeback", pct: 0.15, rare: true, chance: 0.15, durationMin: 15 },
+    { id: "click10",   label: "Click Boost +10%",    type: "click",    pct: 0.10, rare: false, chance: 0.25, durationMin: 30 },
+    { id: "click25",   label: "Rare Click Boost +25%", type: "click",  pct: 0.25, rare: true,  chance: 0.15, durationMin: 15 },
+    { id: "wager5",    label: "Wager Bonus +5%",     type: "wager",    pct: 0.05, rare: true,  chance: 0.15, durationMin: 15 },
+    { id: "gameover",  label: "Game Over Coupon",    type: "gameover", pct: 0,    rare: true,  chance: 0.10, durationMin: 0, maxAvailable: 1 },
+  ];
+
+  function getBlackMarketState() {
+    const today = new Date().toDateString();
+    let s;
+    try { s = JSON.parse(localStorage.getItem(BLACKMARKET_KEY)); } catch { s = null; }
+    if (!s || s.day !== today) {
+      s = { day: today, items: rollBlackMarketItems(), purchased: [] };
+      localStorage.setItem(BLACKMARKET_KEY, JSON.stringify(s));
+    }
+    return s;
+  }
+  function setBlackMarketState(s) {
+    localStorage.setItem(BLACKMARKET_KEY, JSON.stringify(s));
+  }
+  function rollBlackMarketItems() {
+    const items = [];
+    BM_CATALOG.forEach((def) => {
+      if (Math.random() > def.chance) return;
+      const max = def.maxAvailable || 5;
+      const count = def.maxAvailable ? 1 : (1 + Math.floor(Math.random() * max));
+      items.push({ id: def.id, remaining: count, total: count });
+    });
+    return items;
+  }
+  function blackMarketPrice(def) {
+    if (def.type === "gameover") return 5000;
+    const base = def.rare ? 400 : 150;
+    return Math.round(base * (1 + def.pct * 10));
+  }
+  function buyBlackMarketItem(id) {
+    const def = BM_CATALOG.find((d) => d.id === id);
+    if (!def) return false;
+    const s = getBlackMarketState();
+    const entry = s.items.find((i) => i.id === id);
+    if (!entry || entry.remaining <= 0) return false;
+    const price = blackMarketPrice(def);
+    if (getCashBalance() < price) return false;
+    addCashBalance(-price);
+    entry.remaining -= 1;
+    s.purchased.push({ id, boughtAt: Date.now() });
+    setBlackMarketState(s);
+    return true;
+  }
+  function getInventory() {
+    const s = getBlackMarketState();
+    return s.purchased || [];
+  }
+  function getActiveBoosts() {
+    let list;
+    try { list = JSON.parse(localStorage.getItem(ACTIVE_BOOSTS_KEY)) || []; } catch { list = []; }
+    const now = Date.now();
+    list = list.filter((b) => b.expiresAt > now);
+    localStorage.setItem(ACTIVE_BOOSTS_KEY, JSON.stringify(list));
+    return list;
+  }
+  function setActiveBoosts(list) {
+    localStorage.setItem(ACTIVE_BOOSTS_KEY, JSON.stringify(list));
+  }
+  function activateBoost(id) {
+    const def = BM_CATALOG.find((d) => d.id === id);
+    if (!def) return false;
+    const s = getBlackMarketState();
+    const idx = s.purchased.findIndex((p) => p.id === id);
+    if (idx === -1) return false;
+    s.purchased.splice(idx, 1);
+    setBlackMarketState(s);
+
+    if (def.type === "gameover") {
+      const log = getBetLog();
+      const lastLoss = [...log].reverse().find((b) => !b.won);
+      if (lastLoss) addCashBalance(lastLoss.bet);
+      notify(lastLoss ? `Game Over Coupon used — recovered ${fmtMoney(lastLoss.bet)}.` : "No recent loss found to recover.");
+      return true;
+    }
+
+    const boosts = getActiveBoosts();
+    boosts.push({ id, type: def.type, pct: def.pct, expiresAt: Date.now() + def.durationMin * 60000 });
+    setActiveBoosts(boosts);
+    notify(`${def.label} activated!`);
+    return true;
+  }
+  function activeBoostPct(type) {
+    return getActiveBoosts().filter((b) => b.type === type).reduce((sum, b) => sum + b.pct, 0);
+  }
+
   // ---------- wager case batch-size upgrade: "Extra Slots" ----------
   // A one-time, buy-once-and-done upgrade (not leveled like Luck/Speed/Multiplier). Base batch
   // size is 5 cases at once; buying this raises it to CASE_BATCH_MAX (10). Deliberately very
@@ -1535,18 +1694,15 @@ window.Shell = (() => {
     };
     return { weights: shiftedWeights, payouts };
   }
-  function canCombineForLegendary() {
-    return raffleSpinsAvailable() >= LEGENDARY_CASE_COST;
+  function canOpenLegendaryCase() {
+    return getLegendaryCasesOwned() >= 1;
   }
-  // Returns { tier, amount } on success (tier is one of COMBINE_TIERS' keys — "legendary" is
-  // just as rare here as "grand" is on the normal wheel), or null if not enough cases available.
-  function combineCasesForLegendary() {
-    if (!canCombineForLegendary()) return null;
-    const s = getRaffleState();
-    const wagered = getLifetimeWagered();
-    const earnedSteps = Math.floor((wagered + 1e-9) / RAFFLE_WAGER_STEP);
-    s.claimedSteps = Math.min((s.claimedSteps || 0) + LEGENDARY_CASE_COST, earnedSteps);
-    setRaffleState(s);
+  // Opens ONE already-converted Legendary case (does NOT consume regular cases — that
+  // happens at conversion time via convertToLegendaryCase). Returns { tier, amount }, or
+  // null if the player has no Legendary cases in stock.
+  function openLegendaryCase() {
+    if (!canOpenLegendaryCase()) return null;
+    setLegendaryCasesOwned(getLegendaryCasesOwned() - 1);
 
     const rankTier = rankStats().tier;
     const { weights, payouts } = combineOddsForRank(rankTier);
@@ -1554,6 +1710,52 @@ window.Shell = (() => {
     let roll = Math.random() * total;
     let picked = COMBINE_TIERS[0].key;
     for (const t of COMBINE_TIERS) {
+      if (roll < weights[t.key]) { picked = t.key; break; }
+      roll -= weights[t.key];
+    }
+    const amount = Math.round((payouts[picked] || 0) * 100) / 100;
+    if (amount > 0) addBalance(amount);
+    return { tier: picked, amount };
+  }
+
+  // ---------- Exotic cases: shift the Legendary odds table up ANOTHER tier. "Mini" is
+  // dropped entirely and "Minor" takes its slot; Exotic (new top tier) pays 3x whatever
+  // Legendary's OWN top payout would have been. ----------
+  const EXOTIC_TIERS = [
+    { key: "minor",     label: "Minor" },
+    { key: "major",     label: "Major" },
+    { key: "grand",     label: "Grand" },
+    { key: "legendary", label: LEGENDARY_TIER.label },
+    { key: "exotic",    label: EXOTIC_TIER.label },
+  ];
+  const EXOTIC_TIER_SHIFT = { minor: "mini", major: "minor", grand: "major", legendary: "grand", exotic: "legendary" };
+  function exoticOddsForRank(tier) {
+    const { weights: cWeights, payouts: cPayouts } = combineOddsForRank(tier);
+    const weights = {};
+    Object.keys(EXOTIC_TIER_SHIFT).forEach((k) => { weights[k] = cWeights[EXOTIC_TIER_SHIFT[k]]; });
+    const EXOTIC_PAYOUT_MULT = 1.5; // Exotic pays this much more than the equivalent Legendary-case tier
+    const payouts = {
+      minor: cPayouts.minor * EXOTIC_PAYOUT_MULT,
+      major: cPayouts.major * EXOTIC_PAYOUT_MULT,
+      grand: cPayouts.grand * EXOTIC_PAYOUT_MULT,
+      legendary: cPayouts.legendary * EXOTIC_PAYOUT_MULT,
+      exotic: cPayouts.legendary * 3 // still 3x Legendary's top, now also boosted 1.5x
+    };
+    return { weights, payouts };
+  }
+  function canOpenExoticCase() {
+    return getExoticCasesOwned() >= 1;
+  }
+  function openExoticCase() {
+    if (!canOpenExoticCase()) return null;
+    setExoticCasesOwned(getExoticCasesOwned() - 1);
+
+    const rankTier = rankStats().tier;
+    const { weights, payouts } = exoticOddsForRank(rankTier);
+    const total = EXOTIC_TIERS.reduce((sum, t) => sum + weights[t.key], 0);
+    let roll = Math.random() * total;
+    let picked = EXOTIC_TIERS[0].key;
+    for (const t of EXOTIC_TIERS) {
       if (roll < weights[t.key]) { picked = t.key; break; }
       roll -= weights[t.key];
     }
@@ -1579,11 +1781,10 @@ window.Shell = (() => {
       grand: 0.12 + rankBoost * 0.6 + luckBoost * 2,
     };
     const payouts = {
-      none:  0,
       mini:  1 + rankBoost * 2,
-      minor: 5 + rankBoost * 10,
-      major: 25 + rankBoost * 75,
-      grand: 100 + rankBoost * 900,
+      minor: 5 + rankBoost * 15,
+      major: 40 + rankBoost * 260,
+      grand: 300 + rankBoost * 2700,
     };
     return { weights, payouts };
   }
@@ -1651,7 +1852,7 @@ window.Shell = (() => {
     return isNaN(v) ? 0 : v;
   }
   function addLifetimeWagered(amount) {
-    const next = getLifetimeWagered() + (amount || 0);
+    const next = getLifetimeWagered() + (amount || 0) * (1 + activeBoostPct("wager"));
     localStorage.setItem(LIFETIME_WAGERED_KEY, String(next));
     // wagering can cross a $500 step and grant a new case — refresh the sidebar badge live.
     document.dispatchEvent(new CustomEvent("nj:cases", { detail: raffleSpinsAvailable() }));
@@ -1954,14 +2155,14 @@ window.Shell = (() => {
     EARN_UPGRADES.filter((u) => u.kind === "click").forEach((u) => base += u.baseAmt * (state.levels[u.id] || 0));
     let mult = 1;
     EARN_UPGRADES.filter((u) => u.kind === "clickPct").forEach((u) => mult += u.baseAmt * (state.levels[u.id] || 0));
-    return base * mult;
+    return base * mult * (1 + activeBoostPct("click"));
   }
   function earnPassiveRate(state) {
     let rate = 0;
     EARN_UPGRADES.filter((u) => u.kind === "passive").forEach((u) => rate += u.baseAmt * (state.levels[u.id] || 0));
     let mult = 1;
     EARN_UPGRADES.filter((u) => u.kind === "passivePct").forEach((u) => mult += u.baseAmt * (state.levels[u.id] || 0));
-    return rate * mult;
+    return rate * mult * (1 + activeBoostPct("passive"));
   }
   // accrue passive earnings into pendingPassive based on elapsed real time since lastTick
   function earnTick() {
@@ -2331,6 +2532,7 @@ window.Shell = (() => {
       { id: "new", icon: "sparkles", label: "New Releases", attr: "data-shell-new-releases" },
       { id: "earn", icon: "bolt", label: "Incremental", href: "./earn.html" },
       { id: "gifts", icon: "gift", label: "Gifts", href: "./gifts.html" },
+      { id: "blackmarket", icon: "gift", label: "Black Market", href: "./blackmarket.html" },
     ];
     const originals = originalsList();
     return `
@@ -2399,7 +2601,6 @@ window.Shell = (() => {
         <div class="topbar-inner">
           <a class="brand" href="./index.html"><span class="brand-mark">${svg("spark")}</span><span class="brand-name">neon <span>jackpot</span></span></a>
           <div class="top-actions">
-            <div class="boost-chip hover-tip" data-hover-tip="10% Boost active" data-shell-boost>${svg("bolt")}<span data-shell-boost-timer>${fmtClock(getBoostRemaining())}</span></div>
             <div class="action-box">
               <button class="icon-button" data-shell-search aria-label="Search">${svg("search")}</button>
             </div>
@@ -3758,10 +3959,30 @@ window.Shell = (() => {
     document.querySelectorAll("[data-shell-vault]").forEach((btn) => btn.onclick = () => openVaultModal());
     document.querySelectorAll("[data-shell-earn]").forEach((btn) => btn.onclick = () => { window.location.href = "./earn.html"; });
     document.querySelectorAll("[data-shell-search]").forEach((btn) => btn.onclick = () => openSearchModal());
-    document.querySelectorAll("[data-shell-rewards]").forEach((btn) => btn.onclick = (e) => { e.stopPropagation(); openRewardsDropdown(btn); });
-    document.querySelectorAll("[data-shell-currency-toggle]").forEach((btn) => btn.onclick = (e) => { e.stopPropagation(); openCurrencyDropdown(btn); });
-    document.querySelectorAll("[data-shell-notify]").forEach((btn) => btn.onclick = (e) => { e.stopPropagation(); openNotifDropdown(btn); });
-    document.querySelectorAll("[data-shell-profile]").forEach((btn) => btn.onclick = (e) => { e.stopPropagation(); openProfileDropdown(btn); });
+    document.querySelectorAll("[data-shell-rewards]").forEach((btn) => btn.onclick = (e) => {
+      e.stopPropagation();
+      const existing = document.querySelector("[data-rewards-dropdown]");
+      if (existing) { existing.remove(); return; }
+      openRewardsDropdown(btn);
+    });
+    document.querySelectorAll("[data-shell-currency-toggle]").forEach((btn) => btn.onclick = (e) => {
+      e.stopPropagation();
+      const existing = document.querySelector("[data-currency-dropdown]");
+      if (existing) { existing.remove(); return; }
+      openCurrencyDropdown(btn);
+    });
+    document.querySelectorAll("[data-shell-notify]").forEach((btn) => btn.onclick = (e) => {
+      e.stopPropagation();
+      const existing = document.querySelector("[data-notif-dropdown]");
+      if (existing) { existing.remove(); return; }
+      openNotifDropdown(btn);
+    });
+    document.querySelectorAll("[data-shell-profile]").forEach((btn) => btn.onclick = (e) => {
+      e.stopPropagation();
+      const existing = document.querySelector("[data-profile-dropdown]");
+      if (existing) { existing.remove(); return; }
+      openProfileDropdown(btn);
+    });
     document.querySelectorAll("[data-shell-recent-played]").forEach((btn) => btn.onclick = (e) => { e.preventDefault(); notify("Recently played is coming soon."); });
     document.querySelectorAll("[data-shell-profile-open]").forEach((btn) => btn.onclick = (e) => { e.stopPropagation(); openProfileModal(); });
     document.querySelectorAll("[data-shell-case-cta]").forEach((btn) => btn.onclick = () => { window.location.href = "./wheel.html"; });
@@ -3839,12 +4060,6 @@ window.Shell = (() => {
         }
       });
     });
-
-    // keep the topbar boost countdown ticking every second
-    if (boostTickTimer) clearInterval(boostTickTimer);
-    boostTickTimer = setInterval(() => {
-      document.querySelectorAll("[data-shell-boost-timer]").forEach((el) => el.textContent = fmtClock(getBoostRemaining()));
-    }, 1000);
 
     // keep passive earnings accruing in the background even while the earn modal is closed
     earnTick();
@@ -4522,7 +4737,11 @@ window.Shell = (() => {
     RAFFLE_WAGER_STEP, RAFFLE_TIERS, raffleSpinsAvailable, spinRaffleWheel, raffleOddsForRank,
     CASE_UPGRADES, CASE_UPGRADE_MAX, getCaseUpgrades, caseUpgradeCost, caseUpgradeMaxed, buyCaseUpgrade,
     caseSpinDurationMs,
-    LEGENDARY_TIER, LEGENDARY_CASE_COST, COMBINE_TIERS, canCombineForLegendary, combineCasesForLegendary, combineOddsForRank,
+    LEGENDARY_TIER, EXOTIC_TIER, LEGENDARY_CASE_COST, EXOTIC_CASE_COST, COMBINE_TIERS, EXOTIC_TIERS,
+    combineOddsForRank, exoticOddsForRank,
+    getLegendaryCasesOwned, getExoticCasesOwned, convertToLegendaryCase, convertToExoticCase,
+    convertAllToLegendaryCases, convertAllToExoticCases,
+    canOpenLegendaryCase, openLegendaryCase, canOpenExoticCase, openExoticCase,
     CASE_BATCH_BASE, CASE_BATCH_MAX, CASE_BATCH_UPGRADE_COST, hasCaseBatchUpgrade, caseBatchMax, buyCaseBatchUpgrade,
     exportAccountCode, importAccountCode,
     registerAccount, loginToAccount, decodeSyncCodeForMigration, persistActiveAccount, getActiveAccountUsername,
@@ -4530,6 +4749,7 @@ window.Shell = (() => {
     isDeveloper, isDeveloperUnlocked, isDeveloperEnabled, setDeveloperEnabled, tryUnlockDeveloper, devSetBalance, devSetRank, devMaxRank, devMaxIncremental, devGrantCases,
     redeemPromoCode, devRevertChanges, hasDevSnapshot,
     getRailDropdownState, setRailDropdownState, gameSidebarIcon,
+    BM_CATALOG, getBlackMarketState, blackMarketPrice, buyBlackMarketItem, getInventory, getActiveBoosts, activateBoost, activeBoostPct,
     bindOverlayOutsideClose,
   };
 })();

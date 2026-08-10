@@ -243,7 +243,7 @@
           const isLobby = state.tab === "Lobby";
 
           content.innerHTML = `<div class="content">
-            <div class="intro"><div><div class="eyebrow"><i></i> After hours, all yours</div><h1>${isLobby ? "Find your next " : "Pick a game. "}<em>${isLobby ? "bright moment." : "make it glow."}</em></h1></div><p>An original arcade lounge for quick rounds, loud colors, and zero stakes. Pick a game and see where it takes you.</p></div>
+            <div class="intro"><div><div class="eyebrow"><i></i> STOP GETTING RINSED</div><h1>${isLobby ? "LOCK IN " : "Pick a game. "}<em>${isLobby ? "BRO." : "make it glow."}</em></h1></div><p></p></div>
             <div class="shelf-head" style="margin-top:0;"><div></div><label class="search">${svg("grid")}<input placeholder="Search games" value="${state.query === "__favorites" ? "" : state.query}"></label></div>
 
             ${isLobby ? `
