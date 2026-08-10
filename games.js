@@ -7,12 +7,12 @@
 
   CUSTOM CARD IMAGES
   -------------------
-  Set `image` to a path (e.g. "./art/keno.png") to use your own image as the
+  Set `image` to a path (e.g. "./art/keno.jpg") to use your own image as the
   entire card — no icon, no text label drawn on top of it, just your image.
   If you want the game's name visible on the card, bake it into the image
   itself. Leave `image` as "" to fall back to the built-in vector art.
 
-  Recommended image size: 900×600px (3:2 ratio), PNG or WebP. Cards render
+  Recommended image size: 900×600px (3:2 ratio), jpg or WebP. Cards render
   at different sizes around the site (lobby grid, search results, Recent
   Wins strip) and are cropped to fill with object-fit: cover, so keep the
   important part of the artwork centered and avoid key details near the
@@ -27,7 +27,7 @@ window.GAME_CATALOG = [
     rating: "4.9",
     players: "1.9k playing",
     art: "limbo",
-    image: "./art/limbo.png",
+    image: "./art/limbo.jpg",
     available: true
   },
   {
@@ -38,7 +38,7 @@ window.GAME_CATALOG = [
     rating: "4.8",
     players: "1.4k playing",
     art: "dice",
-    image: "./art/dice.png",
+    image: "./art/dice.jpg",
     available: true
   },
   {
@@ -49,7 +49,7 @@ window.GAME_CATALOG = [
     rating: "4.7",
     players: "986 playing",
     art: "keno",
-    image: "./art/keno.png",
+    image: "./art/keno.jpg",
     available: true
   },
   {
@@ -60,7 +60,7 @@ window.GAME_CATALOG = [
     rating: "4.8",
     players: "1.1k playing",
     art: "blackjack",
-    image: "./art/blackjack.png",
+    image: "./art/blackjack.jpg",
     available: true
   },
   {
@@ -71,7 +71,7 @@ window.GAME_CATALOG = [
     rating: "4.6",
     players: "742 playing",
     art: "plinko",
-    image: "./art/plinko.png",
+    image: "./art/plinko.jpg",
     available: true
   },
   {
@@ -82,7 +82,7 @@ window.GAME_CATALOG = [
     rating: "4.5",
     players: "512 playing",
     art: "war",
-    image: "./art/war.png",
+    image: "./art/war.jpg",
     available: true
   },
   {
@@ -93,7 +93,7 @@ window.GAME_CATALOG = [
     rating: "4.8",
     players: "1.6k playing",
     art: "crash",
-    image: "./art/crash.png",
+    image: "./art/crash.jpg",
     available: true
   },
   {
@@ -104,7 +104,7 @@ window.GAME_CATALOG = [
     rating: "4.7",
     players: "633 playing",
     art: "chickencross",
-    image: "./art/chickencross.png",
+    image: "./art/chickencross.jpg",
     available: true
   },
   {
@@ -115,7 +115,7 @@ window.GAME_CATALOG = [
     rating: "4.6",
     players: "588 playing",
     art: "dragontower",
-    image: "./art/dragontower.png",
+    image: "./art/dragontower.jpg",
     available: true
   },
   {
@@ -126,7 +126,7 @@ window.GAME_CATALOG = [
     rating: "4.5",
     players: "441 playing",
     art: "hilo",
-    image: "./art/hilo.png",
+    image: "./art/hilo.jpg",
     available: true
   },
   {
@@ -137,7 +137,7 @@ window.GAME_CATALOG = [
     rating: "4.7",
     players: "897 playing",
     art: "roulette",
-    image: "./art/roulette.png",
+    image: "./art/roulette.jpg",
     available: true
   },
   {
@@ -148,7 +148,7 @@ window.GAME_CATALOG = [
     rating: "4.4",
     players: "378 playing",
     art: "flip",
-    image: "./art/flip.png",
+    image: "./art/flip.jpg",
     available: true
   },
   {
@@ -159,7 +159,7 @@ window.GAME_CATALOG = [
     rating: "4.8",
     players: "1.3k playing",
     art: "mines",
-    image: "./art/mines.png",
+    image: "./art/mines.jpg",
     available: true
   },
   {
@@ -170,7 +170,7 @@ window.GAME_CATALOG = [
     rating: "4.7",
     players: "654 playing",
     art: "moles",
-    image: "./art/moles.png",
+    image: "./art/moles.jpg",
     available: true
   },
   {
@@ -181,7 +181,7 @@ window.GAME_CATALOG = [
     rating: "4.6",
     players: "467 playing",
     art: "rockpaperscissors",
-    image: "./art/rockpaperscissors.png",
+    image: "./art/rockpaperscissors.jpg",
     available: true
   },
   {
@@ -192,7 +192,7 @@ window.GAME_CATALOG = [
     rating: "5.0",
     players: "Live now",
     art: "chickencross",
-    image: "./art/casebattles.png",
+    image: "./art/casebattles.jpg",
     available: true
   },
   {
