@@ -8,6 +8,13 @@
     <link rel="stylesheet" href="./shell.css" />
     <style>
       .content { max-width: 1235px; margin: auto; padding: 34px 32px 60px; }
+      html {
+        scrollbar-width: none;       /* Firefox */
+        -ms-overflow-style: none;    /* old Edge/IE */
+      }
+      html::-webkit-scrollbar {
+        display: none;               /* Chrome, Safari, new Edge */
+      }
       .intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; margin-bottom: 27px; }
       .eyebrow { display: flex; align-items: center; gap: 8px; color: #ff5c9f; font-family: var(--mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; }
       .eyebrow i { width: 25px; height: 1px; background: #ff5c9f; }

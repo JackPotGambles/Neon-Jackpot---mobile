@@ -993,6 +993,33 @@ window.Shell = (() => {
     return { ok: true };
   }
 
+  function changeUsername(newUsername, password) {
+    const clean = (newUsername || "").trim();
+    if (!clean) return { ok: false, error: "Enter a new username." };
+    const currentUsername = getActiveAccountUsername();
+    if (!currentUsername) return { ok: false, error: "No account is currently active." };
+    const accts = getAccounts();
+    const acct = accts[currentUsername];
+    if (!acct || acct.password !== password) return { ok: false, error: "Incorrect password." };
+
+    // If they didn't actually change anything, treat it as a no-op success.
+    if (clean.toLowerCase() === currentUsername.toLowerCase()) return { ok: true };
+
+    // Case-insensitive collision check, same rule as registerAccount.
+    const cleanLower = clean.toLowerCase();
+    const taken = Object.keys(accts).some((u) => u.toLowerCase() === cleanLower);
+    if (taken) return { ok: false, error: "That username is already taken." };
+
+    delete accts[currentUsername];
+    accts[clean] = acct;
+    setAccounts(accts);
+    localStorage.setItem(ACTIVE_ACCOUNT_KEY, clean);
+    setPlayerProfile({ name: clean });
+    persistActiveAccount();
+    cloudSaveAccount(clean, acct);
+    return { ok: true };
+  }
+
   // ---------- switch accounts ----------
   // Persists whatever's currently live back into the active account's registry entry (so nothing
   // is lost), then opens the login gate so the player can log into a different existing account
@@ -1537,14 +1564,14 @@ window.Shell = (() => {
   const ACTIVE_BOOSTS_KEY = "nj_active_boosts";    // [{ id, type, pct, expiresAt }]
 
   const BM_CATALOG = [
-    { id: "passive5",  label: "Passive Boost +5%",   type: "passive",  pct: 0.05, rare: false, chance: 0.25, durationMin: 30 },
-    { id: "passive15", label: "Rare Passive Boost +15%", type: "passive", pct: 0.15, rare: true,  chance: 0.15, durationMin: 15 },
+    { id: "passive5",  label: "Passive Boost +5%",   type: "passive",  pct: 0.05, rare: false, chance: 0.25, durationMin: 40 },
+    { id: "passive15", label: "Rare Passive Boost +25%", type: "passive", pct: 0.15, rare: true,  chance: 0.10, durationMin: 25 },
     { id: "rake10",    label: "Rakeback Boost +10%", type: "rakeback", pct: 0.10, rare: false, chance: 0.25, durationMin: 30 },
     { id: "rake15",    label: "Rare Rakeback Boost +15%", type: "rakeback", pct: 0.15, rare: true, chance: 0.15, durationMin: 15 },
     { id: "click10",   label: "Click Boost +10%",    type: "click",    pct: 0.10, rare: false, chance: 0.25, durationMin: 30 },
     { id: "click25",   label: "Rare Click Boost +25%", type: "click",  pct: 0.25, rare: true,  chance: 0.15, durationMin: 15 },
     { id: "wager5",    label: "Wager Bonus +5%",     type: "wager",    pct: 0.05, rare: true,  chance: 0.15, durationMin: 15 },
-    { id: "gameover",  label: "Game Over Coupon",    type: "gameover", pct: 0,    rare: true,  chance: 0.10, durationMin: 0, maxAvailable: 1 },
+    { id: "gameover",  label: "Game Over Coupon",    type: "gameover", pct: 0,    rare: true,  chance: 0.05, durationMin: 0, maxAvailable: 1 },
   ];
 
   function getBlackMarketState() {
@@ -1571,8 +1598,8 @@ window.Shell = (() => {
     return items;
   }
   function blackMarketPrice(def) {
-    if (def.type === "gameover") return 5000;
-    const base = def.rare ? 400 : 150;
+    if (def.type === "gameover") return 50000;
+    const base = def.rare ? 5000 : 500;
     return Math.round(base * (1 + def.pct * 10));
   }
   function buyBlackMarketItem(id) {
@@ -3491,9 +3518,11 @@ window.Shell = (() => {
             ${img ? `<button class="settings-remove-photo" data-remove-photo>${svg("x")} Remove photo, use emoji</button>` : `<span class="settings-swatch-hint">Color shows behind your emoji/initials</span>`}
           </div>
         </div>
-        <div class="vault-field-label">Display name</div>
-        <div class="vault-input-row"><input type="text" maxlength="18" value="${player.name}" data-settings-name placeholder="Your name" disabled></div>
-        <div class="settings-swatch-hint" style="margin:-10px 0 14px;">Your display name is always your username, so it can't be changed here.</div>
+        <div class="vault-field-label">Username / Display name</div>
+        <div class="vault-input-row"><input type="text" maxlength="18" value="${player.name}" data-settings-name placeholder="Your username"></div>
+        <div class="vault-field-label">Password (required to change username)</div>
+        <div class="vault-input-row"><input type="password" placeholder="Enter your password" data-settings-password autocomplete="off"></div>
+        <div class="gift-error" data-username-error style="display:none;"></div>
         <div class="vault-field-label">Avatar emoji (optional)</div>
         <div class="vault-input-row"><input type="text" maxlength="2" value="${player.avatarEmoji || ""}" data-settings-emoji placeholder="e.g. 🎲"></div>
         <button class="vault-submit" data-settings-save>Save changes</button>
@@ -3593,8 +3622,22 @@ window.Shell = (() => {
       if (removeBtn) removeBtn.onclick = () => { setAvatarImage(""); screen = "personalization"; render(); notify("Profile picture removed."); };
 
       wrap.querySelector("[data-settings-save]").onclick = () => {
-        const name = getPlayerProfile().name; // locked to the username — never editable here
-        setPlayerProfile({ name, avatarColor: chosenColor, avatarEmoji: emojiInput.value.trim() });
+        const errEl = wrap.querySelector("[data-username-error]");
+        const newName = nameInput.value.trim();
+        const passwordInput = wrap.querySelector("[data-settings-password]");
+        const password = passwordInput ? passwordInput.value : "";
+        const currentName = getPlayerProfile().name;
+
+        if (newName !== currentName) {
+          const result = changeUsername(newName, password);
+          if (!result.ok) {
+            errEl.textContent = result.error;
+            errEl.style.display = "block";
+            return;
+          }
+        }
+
+        setPlayerProfile({ avatarColor: chosenColor, avatarEmoji: emojiInput.value.trim() });
         notify("Profile updated.");
         closeAllOverlays();
       };
@@ -3999,6 +4042,7 @@ window.Shell = (() => {
       setSidebarCollapsed(collapsed);
       if (rail) rail.classList.toggle("collapsed", collapsed);
       if (grid) grid.classList.toggle("sidebar-collapsed", collapsed);
+      if (grid) grid.classList.toggle("sidebar-expanded", !collapsed);
       const icon = collapseBtn.querySelector("span");
       if (icon) icon.style.transform = collapsed ? "rotate(180deg)" : "none";
       collapseBtn.setAttribute("data-hover-tip", collapsed ? "Expand" : "Collapse");
@@ -4089,6 +4133,7 @@ window.Shell = (() => {
     if (side) side.innerHTML = sidebarHTML(activeTab);
     const grid = document.querySelector(".site-grid");
     if (grid) grid.classList.toggle("sidebar-collapsed", isSidebarCollapsed());
+    if (grid) grid.classList.toggle("sidebar-expanded", !isSidebarCollapsed());
     bindChrome();
     if (isLoggedOut()) {
       renderLoginGate();
@@ -4745,7 +4790,7 @@ window.Shell = (() => {
     CASE_BATCH_BASE, CASE_BATCH_MAX, CASE_BATCH_UPGRADE_COST, hasCaseBatchUpgrade, caseBatchMax, buyCaseBatchUpgrade,
     exportAccountCode, importAccountCode,
     registerAccount, loginToAccount, decodeSyncCodeForMigration, persistActiveAccount, getActiveAccountUsername,
-    switchAccount, hasOtherAccounts, switchToKnownAccount, changePassword, removeSavedAccount,
+    switchAccount, hasOtherAccounts, switchToKnownAccount, changePassword, changeUsername, removeSavedAccount,
     isDeveloper, isDeveloperUnlocked, isDeveloperEnabled, setDeveloperEnabled, tryUnlockDeveloper, devSetBalance, devSetRank, devMaxRank, devMaxIncremental, devGrantCases,
     redeemPromoCode, devRevertChanges, hasDevSnapshot,
     getRailDropdownState, setRailDropdownState, gameSidebarIcon,
