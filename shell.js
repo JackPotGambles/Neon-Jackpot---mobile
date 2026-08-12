@@ -600,7 +600,11 @@ window.Shell = (() => {
   // Snapshot every SYNC_KEYS value currently live in localStorage into a plain object.
   function snapshotCurrentState() {
     const data = {};
-    SYNC_KEYS.forEach((k) => { const v = localStorage.getItem(k); if (v !== null) data[k] = v; });
+    SYNC_KEYS.forEach((k) => {
+      if (MONEY_LOCAL_KEYS.has(k)) return; // owned by liveFields — never duplicate it in the whole-blob snapshot
+      const v = localStorage.getItem(k);
+      if (v !== null) data[k] = v;
+    });
     return data;
   }
   // Load a previously-taken snapshot back into the live localStorage keys, replacing whatever
@@ -857,7 +861,7 @@ window.Shell = (() => {
       // money/critical fields (cash, vault, reward, lifetimeWagered) are owned by the
       // per-field transaction listeners above and must NOT be clobbered by this older,
       // coarser sync path.
-      const skip = new Set([BALANCE_KEY, VAULT_KEY, REWARD_BALANCE_KEY, LIFETIME_WAGERED_KEY, MONEY_LOCAL_KEYS, BETLOG_KEY, RAFFLE_KEY]);
+      const skip = new Set([...MONEY_LOCAL_KEYS, BETLOG_KEY, RAFFLE_KEY]);
       Object.entries(val.snapshot).forEach(([k, v]) => {
         if (skip.has(k)) return;
         localStorage.setItem(k, v);
