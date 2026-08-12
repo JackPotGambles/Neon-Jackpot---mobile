@@ -1475,8 +1475,16 @@ window.Shell = (() => {
   // Converts as many batches of LEGENDARY_CASE_COST regular cases as currently possible, in
   // one go. Returns the number of Legendary cases actually created (0 if none could be made).
   function convertAllToLegendaryCases() {
-    let count = 0;
-    while (convertToLegendaryCase()) count++;
+    const available = raffleSpinsAvailable();
+    const count = Math.floor(available / LEGENDARY_CASE_COST);
+    if (count <= 0) return 0;
+
+    const s = getRaffleState();
+    const wagered = getLifetimeWagered();
+    const earnedSteps = Math.floor((wagered + 1e-9) / RAFFLE_WAGER_STEP);
+    s.claimedSteps = Math.min((s.claimedSteps || 0) + count * LEGENDARY_CASE_COST, earnedSteps);
+    setRaffleState(s);
+    setLegendaryCasesOwned(getLegendaryCasesOwned() + count);
     return count;
   }
 
@@ -1491,8 +1499,12 @@ window.Shell = (() => {
   // Converts as many batches of EXOTIC_CASE_COST Legendary cases as currently possible, in
   // one go. Returns the number of Exotic cases actually created (0 if none could be made).
   function convertAllToExoticCases() {
-    let count = 0;
-    while (convertToExoticCase()) count++;
+    const legOwned = getLegendaryCasesOwned();
+    const count = Math.floor(legOwned / EXOTIC_CASE_COST);
+    if (count <= 0) return 0;
+
+    setLegendaryCasesOwned(legOwned - count * EXOTIC_CASE_COST);
+    setExoticCasesOwned(getExoticCasesOwned() + count);
     return count;
   }
 
